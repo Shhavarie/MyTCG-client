@@ -2,7 +2,7 @@
   
   {
     "id": "1001",
-    "image":"../img/cards/1冒険者/1001_供物_クオルト_TCG.png",
+    "image":"../img/cards/1冒険者/1001.png",
     "type": "adventurer",
     "hp": 5,
     "attack": 0,
@@ -11,7 +11,7 @@
     "resistance": 2
   },  {
     "id": "1002",
-    "image":"../img/cards/1冒険者/1002グローリィ・レイ.png",
+    "image":"../img/cards/1冒険者/1002.png",
     "type": "adventurer",
     "hp": 5,
     "attack": 3,
@@ -23,7 +23,7 @@
 
   {
     "id": "2001",
-    "image": "../img/cards/2魔物/2001アザービースト_TCG.png",
+    "image": "../img/cards/2魔物/2001.png",
     "type": "monster",
     "hp": 8,
     "attack": 3,
@@ -33,7 +33,7 @@
   },
  {
     "id": "2002",
-    "image": "../img/cards/2魔物/2002ゲルダム_TCG.png",
+    "image": "../img/cards/2魔物/2002.png",
     "type": "monster",
     "hp": 45,
     "attack": 12,
@@ -42,7 +42,7 @@
     "resistance": 5
   }, {
     "id": "2003",
-    "image": "../img/cards/2魔物/2003ファミリアⅠ：猫_TCG.png",
+    "image": "../img/cards/2魔物/2003.png",
     "type": "monster",
     "hp": 0,
     "attack": 1,
@@ -51,7 +51,7 @@
     "resistance": 1
   }, {
     "id": "2005",
-    "image": "../img/cards/2魔物/2005ウンディーネ_TCG.png",
+    "image": "../img/cards/2魔物/2005.png",
     "type": "monster",
     "hp": 15,
     "attack": 0,
@@ -63,44 +63,44 @@
 
     {
     "id": "3001",
-    "image": "../img/cards/3魔法/3001ナチュラルパワー_TCG.png",
+    "image": "../img/cards/3魔法/3001.png",
     "type": "magic"
   },
     {
     "id": "3002",
-    "image": "../img/cards/3魔法/3002ナチュラルパワーⅡ_TCG.png",
+    "image": "../img/cards/3魔法/3002.png",
     "type": "magic"
   },
     {
     "id": "3003",
-    "image": "../img/cards/3魔法/3003コングスマッシュ_TCG.png",
+    "image": "../img/cards/3魔法/3003.png",
     "type": "magic"
   },
   {
     "id": "3004",
-    "image": "../img/cards/3魔法/3004ウィングフライヤー_TCG.png",
+    "image": "../img/cards/3魔法/3004.png",
     "type": "magic"
   },
   {
     "id": "3005",
-    "image": "../img/cards/3魔法/3005ウィングフライヤーⅡ_TCG.png",
+    "image": "../img/cards/3魔法/3005.png",
     "type": "magic"
   },
   {
     "id": "3006",
-    "image": "../img/cards/3魔法/3006クリムゾンファング_TCG.png",
+    "image": "../img/cards/3魔法/3006.png",
     "type": "magic"
   },{
     "id": "3007",
-    "image": "../img/cards/3魔法/3007センスマジック_TCG.png",
+    "image": "../img/cards/3魔法/3007.png",
     "type": "magic"
   },{
     "id": "3008",
-    "image": "../img/cards/3魔法/3008ファミリアⅠ_TCG.png",
+    "image": "../img/cards/3魔法/3008.png",
     "type": "magic"
   },{
     "id": "3009",
-    "image": "../img/cards/3魔法/3009ファミリアⅡ_TCG.png",
+    "image": "../img/cards/3魔法/3009.png",
     "type": "magic"
   },
 
@@ -108,42 +108,42 @@
 
   {
     "id": "4001",
-    "image": "../img/cards/4特技/4001狂人の閃き_TCG.png",
+    "image": "../img/cards/4特技/4001.png",
     "type": "skill"
   },
   {
     "id": "4002",
-    "image": "../img/cards/4特技/4002魔法拡大数＿TCG.png",
+    "image": "../img/cards/4特技/4002.png",
     "type": "skill"
   },
 
 
   {
     "id": "5001",
-    "image": "../img/cards/5イベント/5001アビススキル：可憐なる乙女_TCG.png",
+    "image": "../img/cards/5イベント/5001.png",
     "type": "event"
     
   },
 
   {
     "id": "6001",
-    "image": "../img/cards/6アイテム/6002マナリング＿TCG.png",
+    "image": "../img/cards/6アイテム/6002.png",
     "type": "event"
   },
   {
     "id": "6002",
-    "image": "../img/cards/6アイテム/6001魔晶石(小)__TCG.png",
+    "image": "../img/cards/6アイテム/6001.png",
     "type": "event"
   },
   {
     "id": "6003",
-    "image": "../img/cards/6アイテム/6003フリーニアの陰謀論_TCG.png",
+    "image": "../img/cards/6アイテム/6003.png",
     "type": "event"
   },
 
    {
     "id": "7001",
-    "image": "../img/cards/7フィールド/7001夢のアザビ牧場_TCG.png",
+    "image": "../img/cards/7フィールド/7001.png",
     "type": "field"
   }
 ]
