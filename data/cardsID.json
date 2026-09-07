@@ -2,7 +2,7 @@
   
   {
     "id": "1001",
-    "image":"../img/cards/1adventure/1001.png",
+    "image":"./img/cards/1adventure/1001.png",
     "type": "adventurer",
     "hp": 5,
     "attack": 0,
