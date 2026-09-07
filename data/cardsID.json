@@ -1,0 +1,149 @@
+[
+  
+  {
+    "id": "1001",
+    "image":"../img/cards/1adventure/1001.png",
+    "type": "adventurer",
+    "hp": 5,
+    "attack": 0,
+    "defense": 2,
+    "magic": 0,
+    "resistance": 2
+  },  {
+    "id": "1002",
+    "image":"../img/cards/1adventure/1002.png",
+    "type": "adventurer",
+    "hp": 5,
+    "attack": 3,
+    "defense": 0,
+    "magic": 0,
+    "resistance": 1
+  },
+
+
+  {
+    "id": "2001",
+    "image": "../img/cards/2monster/2001.png",
+    "type": "monster",
+    "hp": 8,
+    "attack": 3,
+    "defense": 1,
+    "magic": 0,
+    "resistance": 1
+  },
+ {
+    "id": "2002",
+    "image": "../img/cards/2monster/2002.png",
+    "type": "monster",
+    "hp": 45,
+    "attack": 12,
+    "defense": 8,
+    "magic": 8,
+    "resistance": 5
+  }, {
+    "id": "2003",
+    "image": "../img/cards/2monster/2003.png",
+    "type": "monster",
+    "hp": 0,
+    "attack": 1,
+    "defense": 1,
+    "magic": 0,
+    "resistance": 1
+  }, {
+    "id": "2005",
+    "image": "../img/cards/2monster/2005.png",
+    "type": "monster",
+    "hp": 15,
+    "attack": 0,
+    "defense": 2,
+    "magic": 7,
+    "resistance": 2
+  },
+
+
+    {
+    "id": "3001",
+    "image": "../img/cards/3magic/3001.png",
+    "type": "magic"
+  },
+    {
+    "id": "3002",
+    "image": "../img/cards/3magic/3002.png",
+    "type": "magic"
+  },
+    {
+    "id": "3003",
+    "image": "../img/cards/3magic/3003.png",
+    "type": "magic"
+  },
+  {
+    "id": "3004",
+    "image": "../img/cards/3magic/3004.png",
+    "type": "magic"
+  },
+  {
+    "id": "3005",
+    "image": "../img/cards/3magic/3005.png",
+    "type": "magic"
+  },
+  {
+    "id": "3006",
+    "image": "../img/cards/3magic/3006.png",
+    "type": "magic"
+  },{
+    "id": "3007",
+    "image": "../img/cards/3magic/3007.png",
+    "type": "magic"
+  },{
+    "id": "3008",
+    "image": "../img/cards/3magic/3008.png",
+    "type": "magic"
+  },{
+    "id": "3009",
+    "image": "../img/cards/3magic/3009.png",
+    "type": "magic"
+  },
+
+
+
+  {
+    "id": "4001",
+    "image": "../img/cards/4skill/4001.png",
+    "type": "skill"
+  },
+  {
+    "id": "4002",
+    "image": "../img/cards/4skill/4002.png",
+    "type": "skill"
+  },
+
+
+  {
+    "id": "5001",
+    "image": "../img/cards/5event/5001.png",
+    "type": "event"
+    
+  },
+
+  {
+    "id": "6001",
+    "image": "../img/cards/6item/6002.png",
+    "type": "event"
+  },
+  {
+    "id": "6002",
+    "image": "../img/cards/6item/6001.png",
+    "type": "event"
+  },
+  {
+    "id": "6003",
+    "image": "../img/cards/6item/6003.png",
+    "type": "event"
+  },
+
+   {
+    "id": "7001",
+    "image": "../img/cards/7field/7001.png",
+    "type": "field"
+  }
+]

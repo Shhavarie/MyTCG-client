@@ -1,0 +1,76 @@
+[
+ {
+  "type": "イベント名",
+  "player": "user1 or user2",
+  "payload": {}
+},
+{
+  "type": "draw",
+  "player": "user1 or user2",
+  "payload": {
+    "faceDown": true
+  }
+},
+
+{
+ "type": "draw",
+  "player": "user1 or user2",
+  "payload": {
+    "faceDown": false
+  }
+},{
+  "type": "play",
+   "player": "user1 or user2",
+  "payload": {
+     "faceDown": false
+  }
+},{
+  "type": "move",
+   "player": "user1 or user2",
+  "payload": {
+      "x": 600,
+    "y": 450
+  }
+}
+,{
+  "type": "flip",
+  "player": "user1 or user2",
+  "payload": {
+      "faceDown": true
+  }
+}
+,{
+  "type": "rotate",
+  "player": "user1 or user2",
+  "payload": {
+    "rotation": 90
+  }
+}
+,{
+  "type": "counter",
+  "player": "user1 or user2",
+  "payload": {
+    "color": "red",
+    "value": 1
+  }
+}
+,{
+  "type": "initial",
+  "player": "user1 or user2",
+  "payload": {
+      "x": 500,
+    "y": 500
+  }
+}
+,
+{
+  "type": "ppChange",
+  "player": "user1 or user2",
+  "payload": {
+    "index": 20,
+    "value": true
+  }
+}
+
+
+]
