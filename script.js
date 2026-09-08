@@ -375,26 +375,28 @@ document.addEventListener(
    ホーム画面ボタン
 ========================================================= */
 function setupHomeButtons() {
-    const user1Button =
-        document.getElementById(
-            "user1-button"
-        );
-    const user2Button =
-        document.getElementById(
-            "user2-button"
-        );
-    const spectatorButton =
-        document.getElementById(
-            "spectator-button"
-        );
+    const user1Button = document.getElementById("user1-button");
+    const user2Button = document.getElementById("user2-button");
+    const spectatorButton = document.getElementById("spectator-button");
+
+    if (user1Button) {
+        user1Button.addEventListener("click", () => {
+            applyDeckCodeFromHome();
+            startGame("user1");
+        });
+    }
+
+    if (user2Button) {
+        user2Button.addEventListener("click", () => {
+            applyDeckCodeFromHome();
+            startGame("user2");
+        });
+    }
 
     if (spectatorButton) {
-        spectatorButton.addEventListener(
-            "click",
-            () => {
-                startGame("spectator");
-            }
-        );
+        spectatorButton.addEventListener("click", () => {
+            startGame("spectator");
+        });
     }
 }
 /* =========================
