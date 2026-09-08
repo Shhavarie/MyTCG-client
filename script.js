@@ -4,44 +4,6 @@ console.log("script.js loaded");
    My TCG Simulator
    script.js
 ========================================================= */
-// WebSocket 接続（Render の URLを後で入れる）
-let ws = null;
-
-function connectWebSocket() {
-  ws = new WebSocket("wss://ctcg-ws-server.onrender.com");
-
-    ws.onopen = () => {
-        addLog("オンライン対戦サーバーに接続しました。");
-    };
-
-    ws.onmessage = (msg) => {
-        const event = JSON.parse(msg.data);
-        applyGameEvent(event);   // ← 受信したイベントを反映する
-    };
-
-    ws.onclose = () => {
-        addLog("サーバーとの接続が切れました。");
-    };
-
-    ws.onerror = (err) => {
-        console.error("WebSocket error:", err);
-    };
-}
-
-function sendGameEvent(type, payload = {}) {
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-        console.warn("WebSocket が接続されていません");
-        return;
-    }
-
-    const event = {
-        type: type,
-        player: currentRole,   // user1 / user2
-        payload: payload
-    };
-
-    ws.send(JSON.stringify(event));
-}
 
 /* =========================================================
   同期ドロー
@@ -494,6 +456,48 @@ async function startGame(role) {
     }
 
     renderAll();
+}
+/* =========================================================
+   My TCG Simulator
+   script.js
+========================================================= */
+// WebSocket 接続（Render の URLを後で入れる）
+let ws = null;
+
+function connectWebSocket() {
+  ws = new WebSocket("wss://ctcg-ws-server.onrender.com");
+
+    ws.onopen = () => {
+        addLog("オンライン対戦サーバーに接続しました。");
+    };
+
+    ws.onmessage = (msg) => {
+        const event = JSON.parse(msg.data);
+        applyGameEvent(event);   // ← 受信したイベントを反映する
+    };
+
+    ws.onclose = () => {
+        addLog("サーバーとの接続が切れました。");
+    };
+
+    ws.onerror = (err) => {
+        console.error("WebSocket error:", err);
+    };
+}
+
+function sendGameEvent(type, payload = {}) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        console.warn("WebSocket が接続されていません");
+        return;
+    }
+
+    const event = {
+        type: type,
+        player: currentRole,   // user1 / user2
+        payload: payload
+    };
+
+    ws.send(JSON.stringify(event));
 }
 
 /* =========================================================
