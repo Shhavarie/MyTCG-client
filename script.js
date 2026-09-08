@@ -1,9 +1,3 @@
-console.log("script.js loaded");
-
-/* =========================================================
-   My TCG Simulator
-   script.js
-========================================================= */
 
 /* =========================================================
   同期ドロー
@@ -361,6 +355,7 @@ function setupHomeButtons() {
         });
     }
 }
+
 /* =========================
    対面
 ========================= */
@@ -400,7 +395,6 @@ async function startGame(role) {
     const deckCode = gameState.deckCode;
     currentRole = role;
 
-    // ★ プレイヤーごとにデッキ・手札・盤面を分割
     gameState = {
         player1: { deck: [], hand: [], board: [] },
         player2: { deck: [], hand: [], board: [] },
@@ -413,50 +407,16 @@ async function startGame(role) {
         logs: []
     };
 
-    // ★ デッキ構築（プレイヤーごと）
-    if (deckCode) {
-        const deck = buildDeckFromCode(deckCode);
+    // ★★★ ここで WebSocket を起動する ★★★
+    setupWebSocket();
 
-        if (role === "user1") {
-            gameState.player1.deck = deck;
-        }
-
-        if (role === "user2") {
-            gameState.player2.deck = deck;
-        }
-    }
-
-    // ★ 初期配置カード選択（共通）
-    showGameScreen();
-
-    const initialCard = await selectInitialCard();
-    if (initialCard) {
-        initialCard.x = 500;
-        initialCard.y = 500;
-
-        // ★ プレイヤーごとの盤面に配置
-        if (role === "user1") {
-            gameState.player1.board.push(initialCard);
-        } else if (role === "user2") {
-            gameState.player2.board.push(initialCard);
-        }
-
-        addLog(`${getCardLabel(initialCard)}を初期配置しました。`);
-    }
-
-    // ★ デッキをシャッフルして手札を配る
-    if (role === "user1") {
-        shuffle(gameState.player1.deck);
-        gameState.player1.hand = gameState.player1.deck.splice(0, 5);
-    }
-
-    if (role === "user2") {
-        shuffle(gameState.player2.deck);
-        gameState.player2.hand = gameState.player2.deck.splice(0, 5);
-    }
-
+    // デッキ構築
+    // 初期配置
+    // 手札配布
     renderAll();
 }
+
+
 /* =========================================================
    My TCG Simulator
    script.js
