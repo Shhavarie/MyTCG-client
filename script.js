@@ -408,7 +408,7 @@ async function startGame(role) {
     };
 
     // ★★★ ここで WebSocket を起動する ★★★
-    setupWebSocket();
+    connectWebSocket();
 
     // デッキ構築
     // 初期配置
