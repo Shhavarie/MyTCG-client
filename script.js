@@ -1,3 +1,10 @@
+/* =========================================================
+  v6 根本修正版
+  - プレイヤー間で衝突しないグローバル一意 instanceId
+  - 相手デッキをローカル生成しない
+  - イベントにカード実体を同梱して到着順・初期同期に強くする
+  - stateSnapshot が相手の deckCode / 自分のデッキを上書きしない
+========================================================= */
 
 /* =========================================================
   同期ドロー
@@ -71,25 +78,26 @@ function applyFlip(player, payload) {
   同期回転
 ========================================================= */
 function applyHandFlip(player, payload) {
-    const { cardId, faceDown } = payload;
-
-    const target =
-        (player === "user1")
-            ? gameState.player1
-            : gameState.player2;
-
+    const target = getRemoteTarget(player);
     if (!target) return;
 
-    let card = target.hand.find(c => c.instanceId === cardId);
-
-    // ドロー同期が先に届かなかった場合でも、デッキから復元できるようにする
-    if (!card) {
-        card = target.deck.find(c => c.instanceId === cardId) || null;
-    }
-
+    const card = getOrCreateRemoteCard(target, payload);
     if (!card) return;
 
-    card.faceDown = !!faceDown;
+    target.hand = target.hand || [];
+    target.deck = target.deck || [];
+
+    target.deck = target.deck.filter(c => c.instanceId !== payload.cardId);
+    target.board = (target.board || []).filter(c => c.instanceId !== payload.cardId);
+
+    card.faceDown = !!payload.faceDown;
+
+    if (!target.hand.some(c => c.instanceId === payload.cardId)) {
+        target.hand.push(card);
+    }
+
+    gameState.handCards = gameState.handCards.filter(c => c.instanceId !== payload.cardId);
+    gameState.handCards.push(card);
 }
 
 /* =========================================================
@@ -185,9 +193,8 @@ function applyStateSnapshot(snapshot, senderPlayer) {
         gameState.pp = clone.pp;
     }
 
-    if (clone.deckCode) {
-        gameState.deckCode = clone.deckCode;
-    }
+    // 相手のデッキコードで自分のデッキ設定を上書きしない。
+    // 各プレイヤーのデッキはそれぞれのクライアントが管理する。
 
     // 各プレイヤーの盤面・手札から全体配列を再構築
     gameState.boardCards = [
@@ -244,147 +251,210 @@ function applyGameEvent(event) {
 /* =========================================================
   同期ドロー
 ========================================================= */
-function applyDraw(player, payload) {
-    const { cardId, faceDown } = payload;
+function getRemoteTarget(player) {
+    return player === "user1" ? gameState.player1 : gameState.player2;
+}
 
-    let deck, hand;
+function getOrCreateRemoteCard(target, payload) {
+    if (!target || !payload) return null;
 
-    if (player === "user1") {
-        deck = gameState.player1.deck;
-        hand = gameState.player1.hand;
-    } else {
-        deck = gameState.player2.deck;
-        hand = gameState.player2.hand;
+    const cardId = payload.cardId;
+    if (!cardId) return null;
+
+    let card =
+        (target.hand || []).find(c => c.instanceId === cardId) ||
+        (target.deck || []).find(c => c.instanceId === cardId) ||
+        (target.board || []).find(c => c.instanceId === cardId) ||
+        (gameState.handCards || []).find(c => c.instanceId === cardId) ||
+        (gameState.boardCards || []).find(c => c.instanceId === cardId) ||
+        null;
+
+    // イベント到着時点で相手のカードがローカルに存在しない場合、
+    // イベント自身に含めたカード情報から復元する。
+    if (!card && payload.card) {
+        card = JSON.parse(JSON.stringify(payload.card));
     }
 
-    const card = deck.find(c => c.instanceId === cardId);
+    return card;
+}
+
+function removeCardEverywhere(target, cardId) {
+    if (!target) return;
+
+    target.deck = (target.deck || []).filter(c => c.instanceId !== cardId);
+    target.hand = (target.hand || []).filter(c => c.instanceId !== cardId);
+    target.board = (target.board || []).filter(c => c.instanceId !== cardId);
+
+    gameState.boardCards = (gameState.boardCards || []).filter(c => c.instanceId !== cardId);
+    gameState.handCards = (gameState.handCards || []).filter(c => c.instanceId !== cardId);
+}
+
+/* =========================================================
+  同期ドロー
+========================================================= */
+function applyDraw(player, payload) {
+    const target = getRemoteTarget(player);
+    if (!target) return;
+
+    const card = getOrCreateRemoteCard(target, payload);
     if (!card) return;
 
-    deck.splice(deck.indexOf(card), 1);
+    target.deck = (target.deck || []).filter(c => c.instanceId !== payload.cardId);
+    target.board = (target.board || []).filter(c => c.instanceId !== payload.cardId);
 
-    card.faceDown = !!faceDown;
+    card.faceDown = !!payload.faceDown;
 
-    if (!hand.some(c => c.instanceId === cardId)) {
-        hand.push(card);
+    if (!target.hand.some(c => c.instanceId === payload.cardId)) {
+        target.hand.push(card);
     }
 
-    gameState.handCards = gameState.handCards.filter(c => c.instanceId !== cardId);
+    gameState.handCards = gameState.handCards.filter(c => c.instanceId !== payload.cardId);
     gameState.handCards.push(card);
 }
+
 /* =========================================================
   同期カード移動
 ========================================================= */
 function applyPlay(player, payload) {
-    const { cardId, x, y, faceDown } = payload;
-
-    const target =
-        (player === "user1")
-            ? gameState.player1
-            : gameState.player2;
-
+    const target = getRemoteTarget(player);
     if (!target) return;
 
-    const card = target.hand.find(c => c.instanceId === cardId);
+    const card = getOrCreateRemoteCard(target, payload);
     if (!card) return;
 
-    target.hand = target.hand.filter(c => c.instanceId !== cardId);
-    target.deck = target.deck.filter(c => c.instanceId !== cardId);
-    target.board = target.board || [];
-
-    // 同じカードを二重登録しない
-    target.board = target.board.filter(c => c.instanceId !== cardId);
-    gameState.boardCards = gameState.boardCards.filter(c => c.instanceId !== cardId);
-    gameState.handCards = gameState.handCards.filter(c => c.instanceId !== cardId);
-
-    card.x = x;
-    card.y = y;
-    card.faceDown = !!faceDown;
-
+    removeCardEverywhere(target, payload.cardId);
     target.board.push(card);
+
+    card.x = Number(payload.x ?? card.x ?? 0);
+    card.y = Number(payload.y ?? card.y ?? 0);
+    card.faceDown = !!payload.faceDown;
+
     gameState.boardCards.push(card);
 }
-function applyMove(player, payload) {
-    const { cardId, x, y } = payload;
 
-    const card = gameState.boardCards.find(c => c.instanceId === cardId);
+function applyMove(player, payload) {
+    const target = getRemoteTarget(player);
+    if (!target) return;
+
+    const card = getOrCreateRemoteCard(target, payload);
     if (!card) return;
 
-    card.x = x;
-    card.y = y;
+    if (!(target.board || []).some(c => c.instanceId === payload.cardId)) {
+        removeCardEverywhere(target, payload.cardId);
+        target.board.push(card);
+    }
+
+    card.x = Number(payload.x ?? card.x ?? 0);
+    card.y = Number(payload.y ?? card.y ?? 0);
+
+    const globalCard = gameState.boardCards.find(c => c.instanceId === payload.cardId);
+    if (!globalCard) {
+        gameState.boardCards.push(card);
+    } else if (globalCard !== card) {
+        globalCard.x = card.x;
+        globalCard.y = card.y;
+    }
 }
 
 /* =========================================================
   同期裏向き
 ========================================================= */
 function applyFlip(player, payload) {
-    const { cardId, faceDown } = payload;
+    const target = getRemoteTarget(player);
+    if (!target) return;
 
-    const card = gameState.boardCards.find(c => c.instanceId === cardId);
+    const card = getOrCreateRemoteCard(target, payload);
     if (!card) return;
 
-    card.faceDown = faceDown;
+    if (!(target.board || []).some(c => c.instanceId === payload.cardId)) {
+        removeCardEverywhere(target, payload.cardId);
+        target.board.push(card);
+    }
+
+    card.faceDown = !!payload.faceDown;
+
+    const globalCard = gameState.boardCards.find(c => c.instanceId === payload.cardId);
+    if (globalCard && globalCard !== card) {
+        globalCard.faceDown = card.faceDown;
+    } else if (!globalCard) {
+        gameState.boardCards.push(card);
+    }
 }
 
 /* =========================================================
   同期回転
 ========================================================= */
 function applyRotate(player, payload) {
-    const { cardId, rotation } = payload;
+    const target = getRemoteTarget(player);
+    if (!target) return;
 
-    const card = gameState.boardCards.find(c => c.instanceId === cardId);
+    const card = getOrCreateRemoteCard(target, payload);
     if (!card) return;
 
-    card.rotation = rotation;
+    if (!(target.board || []).some(c => c.instanceId === payload.cardId)) {
+        removeCardEverywhere(target, payload.cardId);
+        target.board.push(card);
+    }
+
+    card.rotated = !!payload.rotation;
+    card.rotation = !!payload.rotation;
+
+    const globalCard = gameState.boardCards.find(c => c.instanceId === payload.cardId);
+    if (globalCard && globalCard !== card) {
+        globalCard.rotated = card.rotated;
+        globalCard.rotation = card.rotation;
+    } else if (!globalCard) {
+        gameState.boardCards.push(card);
+    }
 }
 
 /* =========================================================
   同期カウンター
 ========================================================= */
 function applyCounter(player, payload) {
-    const { cardId, color, value } = payload;
+    const target = getRemoteTarget(player);
+    if (!target) return;
 
-    const card = gameState.boardCards.find(c => c.instanceId === cardId);
+    const card = getOrCreateRemoteCard(target, payload);
     if (!card) return;
 
-    if (!card.counters) card.counters = {};
+    if (!(target.board || []).some(c => c.instanceId === payload.cardId)) {
+        removeCardEverywhere(target, payload.cardId);
+        target.board.push(card);
+    }
 
-    card.counters[color] = (card.counters[color] || 0) + value;
+    if (!card.counters) card.counters = {};
+    card.counters[payload.color] =
+        (card.counters[payload.color] || 0) + Number(payload.value || 0);
+
+    const globalCard = gameState.boardCards.find(c => c.instanceId === payload.cardId);
+    if (globalCard && globalCard !== card) {
+        globalCard.counters = JSON.parse(JSON.stringify(card.counters));
+    } else if (!globalCard) {
+        gameState.boardCards.push(card);
+    }
 }
 
 /* =========================================================
    同期初期配置
 ========================================================= */
 function applyInitial(player, payload) {
-    const { cardId, x, y } = payload;
-
-    const target =
-        (player === "user1")
-            ? gameState.player1
-            : gameState.player2;
-
+    const target = getRemoteTarget(player);
     if (!target) return;
 
-    target.board = target.board || [];
-
-    let card =
-        target.deck.find(c => c.instanceId === cardId) ||
-        target.hand.find(c => c.instanceId === cardId) ||
-        target.board.find(c => c.instanceId === cardId);
-
+    const card = getOrCreateRemoteCard(target, payload);
     if (!card) return;
 
-    target.deck = target.deck.filter(c => c.instanceId !== cardId);
-    target.hand = target.hand.filter(c => c.instanceId !== cardId);
-    target.board = target.board.filter(c => c.instanceId !== cardId);
-    gameState.boardCards = gameState.boardCards.filter(c => c.instanceId !== cardId);
+    removeCardEverywhere(target, payload.cardId);
 
-    card.x = x;
-    card.y = y;
+    card.x = Number(payload.x ?? card.x ?? 0);
+    card.y = Number(payload.y ?? card.y ?? 0);
     card.faceDown = !!payload.faceDown;
 
     target.board.push(card);
     gameState.boardCards.push(card);
 }
+
 /* =========================================================
    同期PP
 ========================================================= */
@@ -581,10 +651,13 @@ async function startGame(role) {
        プレイヤーへデッキをセット
     --------------------------------------------------------- */
 
-    // 両クライアントで同じ instanceId を解決できるよう、
-    // 同一デッキのコピーを両プレイヤーに用意する。
-    gameState.player1.deck = JSON.parse(JSON.stringify(deck));
-    gameState.player2.deck = JSON.parse(JSON.stringify(deck));
+    // 自分のデッキだけをローカルに保持する。
+    // 相手のデッキは相手クライアントから同期されたカード情報を正とする。
+    if (role === "user1") {
+        gameState.player1.deck = deck;
+    } else if (role === "user2") {
+        gameState.player2.deck = deck;
+    }
 
     if (role === "spectator") {
 
@@ -661,7 +734,8 @@ async function startGame(role) {
                 cardId: initialCard.instanceId,
                 x: initialCard.x,
                 y: initialCard.y,
-                faceDown: !!initialCard.faceDown
+                faceDown: !!initialCard.faceDown,
+                card: JSON.parse(JSON.stringify(initialCard))
             });
 
         } else {
@@ -708,7 +782,8 @@ async function startGame(role) {
 
             sendGameEvent("draw", {
                 cardId: card.instanceId,
-                faceDown: !!card.faceDown
+                faceDown: !!card.faceDown,
+                card: JSON.parse(JSON.stringify(card))
             });
         }
 
@@ -1279,8 +1354,14 @@ function renderHand() {
 ========================================================= */
 function createCardData(cardInfo) {
     const card = {
-        instanceId:
-           `card-${gameState.nextCardId++}`,
+        // クライアントをまたいでも衝突しない一意ID
+        instanceId: (() => {
+            const owner = currentRole || "local";
+            const uuid = (typeof crypto !== "undefined" && crypto.randomUUID)
+                ? crypto.randomUUID()
+                : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+            return `card-${owner}-${uuid}`;
+        })(),
         cardId:
             String(cardInfo.id ?? ""),
         image:
@@ -1848,7 +1929,8 @@ function rotateCard(instanceId) {
     // ★★★ オンライン同期 ★★★
     sendGameEvent("rotate", {
         cardId: card.instanceId,
-        rotation: card.rotated
+        rotation: card.rotated,
+        card: JSON.parse(JSON.stringify(card))
     });
 
     addLog(
@@ -1973,7 +2055,8 @@ function renderHand() {
 
             sendGameEvent("handFlip", {
                 cardId: card.instanceId,
-                faceDown: !!card.faceDown
+                faceDown: !!card.faceDown,
+                card: JSON.parse(JSON.stringify(card))
             });
 
             renderHand();
@@ -2183,7 +2266,8 @@ function setupBoardDrop() {
             cardId: card.instanceId,
             x: card.x,
             y: card.y,
-            faceDown: card.faceDown
+            faceDown: !!card.faceDown,
+            card: JSON.parse(JSON.stringify(card))
         });
 
         addLog(`${getCardLabel(card)}をボードに配置しました。`);
@@ -3042,7 +3126,8 @@ function executeContextAction(action) {
         // ★★★ オンライン同期 ★★★
         sendGameEvent("flip", {
             cardId: card.instanceId,
-            faceDown: false
+            faceDown: false,
+            card: JSON.parse(JSON.stringify(card))
         });
 
         addLog(`${getCardLabel(card)}を表向きにしました。`);
@@ -3056,7 +3141,8 @@ function executeContextAction(action) {
         // ★★★ オンライン同期 ★★★
         sendGameEvent("flip", {
             cardId: card.instanceId,
-            faceDown: true
+            faceDown: true,
+            card: JSON.parse(JSON.stringify(card))
         });
 
         addLog(`${getCardLabel(card)}を裏向きにしました。`);
@@ -3072,7 +3158,8 @@ function executeContextAction(action) {
         sendGameEvent("counter", {
             cardId: card.instanceId,
             color: type,
-            value: +1
+            value: +1,
+            card: JSON.parse(JSON.stringify(card))
         });
 
         return;
@@ -3088,7 +3175,8 @@ function executeContextAction(action) {
         sendGameEvent("counter", {
             cardId: card.instanceId,
             color: type,
-            value: -1
+            value: -1,
+            card: JSON.parse(JSON.stringify(card))
         });
 
         return;
