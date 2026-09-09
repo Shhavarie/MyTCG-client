@@ -1,110 +1,97 @@
-
 /* =========================================================
-  同期ドロー
+   オンライン同期
 ========================================================= */
+function getPlayerState(player) {
+    if (player === "user1") return gameState.player1;
+    if (player === "user2") return gameState.player2;
+    return null;
+}
+
+function getBoardCard(cardId) {
+    return gameState.boardCards.find(c => c.instanceId === cardId) || null;
+}
+
+function findCardInPlayerDeckOrHand(player, cardId) {
+    const state = getPlayerState(player);
+    if (!state) return null;
+    return state.deck.find(c => c.instanceId === cardId) ||
+           state.hand.find(c => c.instanceId === cardId) || null;
+}
+
 function applyDraw(player, payload) {
-    const { cardId, faceDown } = payload;
-
-    let deck, hand;
-
-    if (player === "user1") {
-        deck = gameState.player1.deck;
-        hand = gameState.player1.hand;
-    } else {
-        deck = gameState.player2.deck;
-        hand = gameState.player2.hand;
-    }
-
-    // デッキから該当カードを探す
-    const card = deck.find(c => c.instanceId === cardId);
+    const state = getPlayerState(player);
+    if (!state) return;
+    const { cardId, faceDown = false } = payload;
+    const card = state.deck.find(c => c.instanceId === cardId);
     if (!card) return;
-
-    // デッキから削除
-    deck.splice(deck.indexOf(card), 1);
-
-    // 裏向き設定
+    state.deck.splice(state.deck.indexOf(card), 1);
     card.faceDown = faceDown;
+    if (!state.hand.some(c => c.instanceId === cardId)) state.hand.push(card);
+}
 
-    // 手札に追加
-    hand.push(card);
-}/* =========================================================
-  同期カード移動
-========================================================= */
+function applyPlay(player, payload) {
+    const state = getPlayerState(player);
+    if (!state) return;
+    const { cardId, x, y, faceDown = false } = payload;
+    const card = state.hand.find(c => c.instanceId === cardId);
+    if (!card) return;
+    state.hand.splice(state.hand.indexOf(card), 1);
+    card.x = Number(x) || 0;
+    card.y = Number(y) || 0;
+    card.faceDown = faceDown;
+    if (!state.board.some(c => c.instanceId === cardId)) state.board.push(card);
+    if (!gameState.boardCards.some(c => c.instanceId === cardId)) gameState.boardCards.push(card);
+}
+
 function applyMove(player, payload) {
-    const { cardId, x, y } = payload;
-
-    const card = findCardOnBoard(cardId);
+    const card = getBoardCard(payload.cardId);
     if (!card) return;
+    card.x = Number(payload.x) || 0;
+    card.y = Number(payload.y) || 0;
+}
 
-    card.x = x;
-    card.y = y;
-}/* =========================================================
-  同期裏向き
-========================================================= */
 function applyFlip(player, payload) {
-    const { cardId, faceDown } = payload;
-
-    const card = findCardOnBoard(cardId);
+    const card = getBoardCard(payload.cardId);
     if (!card) return;
-
-    card.faceDown = faceDown;
+    card.faceDown = !!payload.faceDown;
 }
-/* =========================================================
-  同期回転
-========================================================= */
+
 function applyRotate(player, payload) {
-    const { cardId, rotation } = payload;
-
-    const card = findCardOnBoard(cardId);
+    const card = getBoardCard(payload.cardId);
     if (!card) return;
-
-    card.rotation = rotation;
+    card.rotated = !!payload.rotation;
 }
-/* =========================================================
-  同期カウンター
-========================================================= */
+
 function applyCounter(player, payload) {
-    const { cardId, color, value } = payload;
-
-    const card = findCardOnBoard(cardId);
+    const card = getBoardCard(payload.cardId);
     if (!card) return;
-
     if (!card.counters) card.counters = {};
-
-    card.counters[color] = (card.counters[color] || 0) + value;
+    const value = Number(payload.value) || 0;
+    card.counters[payload.color] = (card.counters[payload.color] || 0) + value;
 }
-/* =========================================================
-   同期初期配置
-========================================================= */
-function applyInitial(player, payload) {
-    const { cardId, x, y } = payload;
 
-    const card = findCardInDeckOrHand(player, cardId);
+function applyInitial(player, payload) {
+    const state = getPlayerState(player);
+    if (!state) return;
+    const { cardId, x, y } = payload;
+    const card = findCardInPlayerDeckOrHand(player, cardId);
     if (!card) return;
 
-    card.x = x;
-    card.y = y;
+    const deckIndex = state.deck.indexOf(card);
+    if (deckIndex !== -1) state.deck.splice(deckIndex, 1);
+    const handIndex = state.hand.indexOf(card);
+    if (handIndex !== -1) state.hand.splice(handIndex, 1);
 
-    gameState.boardCards.push(card);
-}/* =========================================================
-   同期PP
-========================================================= */
-function applyPPChange(player, payload) {
-    const { index, value } = payload;
+    card.x = Number(x) || 0;
+    card.y = Number(y) || 0;
 
-    // PP配列を更新
-    gameState.pp[index] = value;
-
-    // PP再描画
-    renderPP();
+    if (!state.board.some(c => c.instanceId === cardId)) state.board.push(card);
+    if (!gameState.boardCards.some(c => c.instanceId === cardId)) gameState.boardCards.push(card);
 }
 
-/* =========================================================
-   同期受信
-========================================================= */
 function applyGameEvent(event) {
-    const { type, player, payload } = event;
-
+    if (!event || !event.type) return;
+    const { type, player, payload = {} } = event;
     switch (type) {
         case "draw": applyDraw(player, payload); break;
         case "play": applyPlay(player, payload); break;
@@ -114,156 +101,14 @@ function applyGameEvent(event) {
         case "counter": applyCounter(player, payload); break;
         case "initial": applyInitial(player, payload); break;
         case "ppChange": applyPPChange(player, payload); break;
-
-        // 任意イベント
-        case "select": applySelect(player, payload); break;
-        case "endTurn": applyEndTurn(player, payload); break;
-        case "shuffle": applyShuffle(player, payload); break;
-        case "remove": applyRemove(player, payload); break;
-        case "handRemove": applyHandRemove(player, payload); break;
+        case "select": if (typeof applySelect === "function") applySelect(player, payload); break;
+        case "endTurn": if (typeof applyEndTurn === "function") applyEndTurn(player, payload); break;
+        case "shuffle": if (typeof applyShuffle === "function") applyShuffle(player, payload); break;
+        case "remove": if (typeof applyRemove === "function") applyRemove(player, payload); break;
+        case "handRemove": if (typeof applyHandRemove === "function") applyHandRemove(player, payload); break;
     }
-
     renderAll();
 }
-/* =========================================================
-  同期ドロー
-========================================================= */
-function applyDraw(player, payload) {
-    const { cardId, faceDown } = payload;
-
-    let deck, hand;
-
-    if (player === "user1") {
-        deck = gameState.player1.deck;
-        hand = gameState.player1.hand;
-    } else {
-        deck = gameState.player2.deck;
-        hand = gameState.player2.hand;
-    }
-
-    const card = deck.find(c => c.instanceId === cardId);
-    if (!card) return;
-
-    deck.splice(deck.indexOf(card), 1);
-
-    card.faceDown = faceDown;
-
-    hand.push(card);
-}
-/* =========================================================
-  同期カード移動
-========================================================= */
-function applyPlay(player, payload) {
-    const { cardId, x, y, faceDown } = payload;
-
-    let hand;
-
-    if (player === "user1") {
-        hand = gameState.player1.hand;
-    } else {
-        hand = gameState.player2.hand;
-    }
-
-    const card = hand.find(c => c.instanceId === cardId);
-    if (!card) return;
-
-    hand.splice(hand.indexOf(card), 1);
-
-    card.x = x;
-    card.y = y;
-    card.faceDown = faceDown;
-
-    gameState.boardCards.push(card);
-}
-function applyMove(player, payload) {
-    const { cardId, x, y } = payload;
-
-    const card = gameState.boardCards.find(c => c.instanceId === cardId);
-    if (!card) return;
-
-    card.x = x;
-    card.y = y;
-}
-
-/* =========================================================
-  同期裏向き
-========================================================= */
-function applyFlip(player, payload) {
-    const { cardId, faceDown } = payload;
-
-    const card = gameState.boardCards.find(c => c.instanceId === cardId);
-    if (!card) return;
-
-    card.faceDown = faceDown;
-}
-
-/* =========================================================
-  同期回転
-========================================================= */
-function applyRotate(player, payload) {
-    const { cardId, rotation } = payload;
-
-    const card = gameState.boardCards.find(c => c.instanceId === cardId);
-    if (!card) return;
-
-    card.rotation = rotation;
-}
-
-/* =========================================================
-  同期カウンター
-========================================================= */
-function applyCounter(player, payload) {
-    const { cardId, color, value } = payload;
-
-    const card = gameState.boardCards.find(c => c.instanceId === cardId);
-    if (!card) return;
-
-    if (!card.counters) card.counters = {};
-
-    card.counters[color] = (card.counters[color] || 0) + value;
-}
-
-/* =========================================================
-   同期初期配置
-========================================================= */
-function applyInitial(player, payload) {
-    const { cardId, x, y } = payload;
-
-    let deck, hand;
-
-    if (player === "user1") {
-        deck = gameState.player1.deck;
-        hand = gameState.player1.hand;
-    } else {
-        deck = gameState.player2.deck;
-        hand = gameState.player2.hand;
-    }
-
-    let card =
-        deck.find(c => c.instanceId === cardId) ||
-        hand.find(c => c.instanceId === cardId);
-
-    if (!card) return;
-
-    card.x = x;
-    card.y = y;
-
-    gameState.boardCards.push(card);
-}
-/* =========================================================
-   同期PP
-========================================================= */
-function applyPPChange(player, payload) {
-    const { index, value } = payload;
-
-    gameState.pp[index] = value;
-
-    renderPP();
-}
-
-
-
-
 
 /* =========================================================
    グローバル変数
@@ -361,242 +206,99 @@ function getOpponentPlayerState() {
    ゲーム開始
 ========================================================= */
 async function startGame(role) {
-
     console.log("ゲーム開始:", role);
 
-    /* ---------------------------------------------------------
-       カードDB読み込み
-    --------------------------------------------------------- */
     const loaded = await loadCardDatabase();
-
     if (!loaded) {
         console.error("カードDBの読み込みに失敗しました。");
         alert("カードデータの読み込みに失敗しました。");
         return;
     }
 
-    /* ---------------------------------------------------------
-       デッキコード取得
-    --------------------------------------------------------- */
     const deckCode = (gameState.deckCode || "").trim();
-
-    console.log("デッキコード:", deckCode);
-
     if (!deckCode) {
         alert("デッキコードが入力されていません。");
         return;
     }
 
     currentRole = role;
-
-    /* ---------------------------------------------------------
-       ゲーム状態を初期化
-    --------------------------------------------------------- */
     gameState = {
-        player1: {
-            deck: [],
-            hand: [],
-            board: []
-        },
-
-        player2: {
-            deck: [],
-            hand: [],
-            board: []
-        },
-
-        role: role,
+        player1: { deck: [], hand: [], board: [] },
+        player2: { deck: [], hand: [], board: [] },
+        role,
         selectedCardId: null,
         nextCardId: 1,
-
         boardCards: [],
         handCards: [],
-
         pp: Array(20).fill(false),
-
         history: [],
         logs: [],
-
-        deckCode: deckCode
+        deckCode
     };
-
-    /*
-       startGame() 内で gameState を作り直しているので、
-       デバッグ用の window.gameState も更新する
-    */
     window.gameState = gameState;
 
-    /* ---------------------------------------------------------
-       デッキ構築
-    --------------------------------------------------------- */
-
     const deck = buildDeckFromCode(deckCode);
-
-    console.log("生成されたデッキ枚数:", deck.length);
-
-    if (deck.length === 0) {
-        alert(
-            "デッキを作成できませんでした。\n" +
-            "デッキコードまたはカードIDを確認してください。"
-        );
+    if (!deck.length) {
+        alert("デッキを作成できませんでした。\nデッキコードまたはカードIDを確認してください。");
         return;
     }
 
-    /* ---------------------------------------------------------
-       プレイヤーへデッキをセット
-    --------------------------------------------------------- */
-
-    if (role === "user1") {
-
-        gameState.player1.deck = deck;
-
-    } else if (role === "user2") {
-
-        gameState.player2.deck = deck;
-
-    } else if (role === "spectator") {
-
-        /*
-           観戦者の場合は、ここではデッキを操作しない
-        */
-
-    }
-
-    /* ---------------------------------------------------------
-       ★ 先にゲーム画面へ移動
-       
-       初期配置カード選択UIがゲーム画面内にある場合、
-       これを先に実行しないと選択画面が見えない。
-    --------------------------------------------------------- */
+    // 両プレイヤー分の「同じinstanceIdを持つ」デッキを用意する。
+    // 相手から届いたcardIdを相手側でも解決できるようにする。
+    const cloneDeck = deck.map(card => ({
+        ...card,
+        baseStats: { ...(card.baseStats || {}) },
+        counters: { ...(card.counters || {}) }
+    }));
+    gameState.player1.deck = deck;
+    gameState.player2.deck = cloneDeck;
 
     showGameScreen();
 
-    /* ---------------------------------------------------------
-       現在のプレイヤーのデッキを取得
-    --------------------------------------------------------- */
+    // WebSocketがOPENになるまで待ってから初期イベントを送れるようにする。
+    await connectWebSocket();
 
-    let player = null;
-
-    if (role === "user1") {
-        player = gameState.player1;
-    } else if (role === "user2") {
-        player = gameState.player2;
-    }
-
-    /* ---------------------------------------------------------
-       初期配置カードを1枚選択
-    --------------------------------------------------------- */
+    const player = role === "user1" ? gameState.player1 :
+                   role === "user2" ? gameState.player2 : null;
 
     if (player) {
-
-        console.log(
-            "初期配置カードを選択します。デッキ枚数:",
-            player.deck.length
-        );
-
         const initialCard = await selectInitialCard();
-
-        /* -----------------------------------------------------
-           初期配置カードを盤面へ
-        ----------------------------------------------------- */
-
         if (initialCard) {
-
-            console.log(
-                "初期配置カード:",
-                initialCard
-            );
-   initialCard.x = 350;
-    initialCard.y = 600;
-
+            initialCard.x = 350;
+            initialCard.y = 600;
             player.board.push(initialCard);
+            if (!gameState.boardCards.some(c => c.instanceId === initialCard.instanceId)) {
+                gameState.boardCards.push(initialCard);
+            }
 
-            /*
-               全体盤面管理にも登録
-            */
-            gameState.boardCards.push(initialCard);
-
-        } else {
-
-            console.warn(
-                "初期配置カードが選択されませんでした。"
-            );
+            // 初期配置を相手へ送信
+            sendGameEvent("initial", {
+                cardId: initialCard.instanceId,
+                x: initialCard.x,
+                y: initialCard.y
+            });
         }
-
-        /* -----------------------------------------------------
-           残りのデッキをシャッフル
-        ----------------------------------------------------- */
 
         shuffle(player.deck);
 
-        console.log(
-            "シャッフル後のデッキ枚数:",
-            player.deck.length
-        );
-
-        /* -----------------------------------------------------
-           5枚ドロー
-        ----------------------------------------------------- */
-
-        const drawCount = Math.min(
-            5,
-            player.deck.length
-        );
-
+        const drawCount = Math.min(5, player.deck.length);
         for (let i = 0; i < drawCount; i++) {
-
             const card = player.deck.pop();
-
-            if (!card) {
-                break;
+            if (!card) break;
+            player.hand.push(card);
+            if (!gameState.handCards.some(c => c.instanceId === card.instanceId)) {
+                gameState.handCards.push(card);
             }
 
-            player.hand.push(card);
-
-            /*
-               全体手札管理にも登録
-            */
-            gameState.handCards.push(card);
+            // 初期5枚も相手へ同期
+            sendGameEvent("draw", {
+                cardId: card.instanceId,
+                faceDown: false
+            });
         }
-
-        console.log(
-            "初期手札:",
-            player.hand
-        );
-
-        console.log(
-            "残りデッキ:",
-            player.deck.length
-        );
     }
-
-    /* ---------------------------------------------------------
-       画面を再描画
-    --------------------------------------------------------- */
 
     renderAll();
-
-    /* ---------------------------------------------------------
-       WebSocket接続
-    --------------------------------------------------------- */
-
-    try {
-
-        connectWebSocket();
-
-    } catch (error) {
-
-        console.warn(
-            "WebSocket接続に失敗しました。",
-            error
-        );
-
-        /*
-           WebSocketが使えなくても、
-           ローカルゲーム自体は続行できるようにする
-        */
-    }
-
     console.log("ゲーム開始処理完了");
 }
 
@@ -608,39 +310,61 @@ async function startGame(role) {
 let ws = null;
 
 function connectWebSocket() {
-  ws = new WebSocket("wss://ctcg-ws-server.onrender.com");
+    return new Promise(resolve => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            resolve(true);
+            return;
+        }
 
-    ws.onopen = () => {
-        addLog("オンライン対戦サーバーに接続しました。");
-    };
+        ws = new WebSocket("wss://ctcg-ws-server.onrender.com");
+        let settled = false;
+        const finish = value => {
+            if (!settled) { settled = true; resolve(value); }
+        };
 
-    ws.onmessage = (msg) => {
-        const event = JSON.parse(msg.data);
-        applyGameEvent(event);   // ← 受信したイベントを反映する
-    };
+        ws.onopen = () => {
+            addLog("オンライン対戦サーバーに接続しました。");
+            console.log("WebSocket OPEN");
+            finish(true);
+        };
 
-    ws.onclose = () => {
-        addLog("サーバーとの接続が切れました。");
-    };
+        ws.onmessage = msg => {
+            try {
+                const event = JSON.parse(msg.data);
+                console.log("同期受信:", event);
+                applyGameEvent(event);
+            } catch (error) {
+                console.error("同期データの解析に失敗:", error, msg.data);
+            }
+        };
 
-    ws.onerror = (err) => {
-        console.error("WebSocket error:", err);
-    };
+        ws.onclose = () => {
+            addLog("サーバーとの接続が切れました。");
+            finish(false);
+        };
+
+        ws.onerror = err => {
+            console.error("WebSocket error:", err);
+            finish(false);
+        };
+    });
 }
 
 function sendGameEvent(type, payload = {}) {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
-        console.warn("WebSocket が接続されていません");
-        return;
+        console.warn("WebSocket が接続されていません。送信中止:", type, payload);
+        return false;
     }
 
     const event = {
-        type: type,
-        player: currentRole,   // user1 / user2
-        payload: payload
+        type,
+        player: currentRole,
+        payload
     };
 
+    console.log("同期送信:", event);
     ws.send(JSON.stringify(event));
+    return true;
 }
 
 /* =========================================================
@@ -1278,10 +1002,7 @@ function renderBoard() {
 
     boardCardsElement.innerHTML = "";
 
-        const board =
-        (currentRole === "user1")
-            ? gameState.player1.board
-            : gameState.player2.board;
+        const board = gameState.boardCards;
 
     board.forEach(card => {
        
@@ -1685,12 +1406,7 @@ function rotateCard(instanceId) {
 
 function findBoardCard(instanceId) {
 
-    const board =
-        (currentRole === "user1")
-            ? gameState.player1.board
-            : gameState.player2.board;
-
-    return board.find(c => c.instanceId === instanceId) || null;
+    return gameState.boardCards.find(c => c.instanceId === instanceId) || null;
 }
 
 /* =========================================================
