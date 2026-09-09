@@ -43,6 +43,13 @@ function applyMove(player, payload) {
 
     card.x = x;
     card.y = y;
+
+    const target = player === "user1" ? gameState.player1 : gameState.player2;
+    const ownedCard = target?.board?.find(c => c.instanceId === cardId);
+    if (ownedCard && ownedCard !== card) {
+        ownedCard.x = x;
+        ownedCard.y = y;
+    }
 }/* =========================================================
   同期裏向き
 ========================================================= */
@@ -52,8 +59,39 @@ function applyFlip(player, payload) {
     const card = findCardOnBoard(cardId);
     if (!card) return;
 
-    card.faceDown = faceDown;
+    card.faceDown = !!faceDown;
+
+    const target = player === "user1" ? gameState.player1 : gameState.player2;
+    const ownedCard = target?.board?.find(c => c.instanceId === cardId);
+    if (ownedCard && ownedCard !== card) {
+        ownedCard.faceDown = !!faceDown;
+    }
 }
+/* =========================================================
+  同期回転
+========================================================= */
+function applyHandFlip(player, payload) {
+    const { cardId, faceDown } = payload;
+
+    const target =
+        (player === "user1")
+            ? gameState.player1
+            : gameState.player2;
+
+    if (!target) return;
+
+    let card = target.hand.find(c => c.instanceId === cardId);
+
+    // ドロー同期が先に届かなかった場合でも、デッキから復元できるようにする
+    if (!card) {
+        card = target.deck.find(c => c.instanceId === cardId) || null;
+    }
+
+    if (!card) return;
+
+    card.faceDown = !!faceDown;
+}
+
 /* =========================================================
   同期回転
 ========================================================= */
@@ -63,7 +101,15 @@ function applyRotate(player, payload) {
     const card = findCardOnBoard(cardId);
     if (!card) return;
 
+    card.rotated = !!rotation;
     card.rotation = rotation;
+
+    const target = player === "user1" ? gameState.player1 : gameState.player2;
+    const ownedCard = target?.board?.find(c => c.instanceId === cardId);
+    if (ownedCard && ownedCard !== card) {
+        ownedCard.rotated = !!rotation;
+        ownedCard.rotation = rotation;
+    }
 }
 /* =========================================================
   同期カウンター
@@ -179,6 +225,7 @@ function applyGameEvent(event) {
         case "play": applyPlay(player, payload); break;
         case "move": applyMove(player, payload); break;
         case "flip": applyFlip(player, payload); break;
+        case "handFlip": applyHandFlip(player, payload); break;
         case "rotate": applyRotate(player, payload); break;
         case "counter": applyCounter(player, payload); break;
         case "initial": applyInitial(player, payload); break;
@@ -215,9 +262,14 @@ function applyDraw(player, payload) {
 
     deck.splice(deck.indexOf(card), 1);
 
-    card.faceDown = faceDown;
+    card.faceDown = !!faceDown;
 
-    hand.push(card);
+    if (!hand.some(c => c.instanceId === cardId)) {
+        hand.push(card);
+    }
+
+    gameState.handCards = gameState.handCards.filter(c => c.instanceId !== cardId);
+    gameState.handCards.push(card);
 }
 /* =========================================================
   同期カード移動
@@ -235,7 +287,8 @@ function applyPlay(player, payload) {
     const card = target.hand.find(c => c.instanceId === cardId);
     if (!card) return;
 
-    target.hand.splice(target.hand.indexOf(card), 1);
+    target.hand = target.hand.filter(c => c.instanceId !== cardId);
+    target.deck = target.deck.filter(c => c.instanceId !== cardId);
     target.board = target.board || [];
 
     // 同じカードを二重登録しない
@@ -1803,6 +1856,7 @@ function rotateCard(instanceId) {
     );
 
     renderBoard();
+    sendStateSnapshot();
 }
 
 /* =========================================================
@@ -1916,7 +1970,14 @@ function renderHand() {
         cardElement.addEventListener("contextmenu", event => {
             event.preventDefault();
             card.faceDown = !card.faceDown;
+
+            sendGameEvent("handFlip", {
+                cardId: card.instanceId,
+                faceDown: !!card.faceDown
+            });
+
             renderHand();
+            sendStateSnapshot();
         });
 
         // ドラッグ
@@ -2159,7 +2220,8 @@ function drawCard(faceDown = false) {
     saveHistory();
 
     // デッキの一番上から1枚引く
-    const card = deck.shift();
+    // startGame() と同じく末尾を「デッキの上」として扱う
+    const card = deck.pop();
     if (!card) {
         addLog("カードを引けませんでした。");
         return;
@@ -2171,6 +2233,16 @@ function drawCard(faceDown = false) {
     // ★ プレイヤーの手札に追加
     hand.push(card);
 
+    // 全体手札管理にも登録
+    gameState.handCards = gameState.handCards.filter(c => c.instanceId !== card.instanceId);
+    gameState.handCards.push(card);
+
+    // ★★★ オンライン同期（draw）★★★
+    sendGameEvent("draw", {
+        cardId: card.instanceId,
+        faceDown: !!card.faceDown
+    });
+
     // ログ
     addLog(
         faceDown
@@ -2180,6 +2252,9 @@ function drawCard(faceDown = false) {
 
     // 手札を更新
     renderHand();
+
+    // 現在のデッキ順・手札状態を相手へ確実に反映
+    sendStateSnapshot();
 }
 
 
