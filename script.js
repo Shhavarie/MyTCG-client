@@ -3628,7 +3628,16 @@ function changeBaseStat(card, statName, label, input) {
         // ★ カウンターだけ変更する（連動の本体）
         const counterType = getCounterTypeForStat(statName);
         if (counterType) {
-            card.counters[counterType] += difference;
+            const counters = cloneCounters(card.counters);
+            counters[counterType] += difference;
+
+            // 詳細画面から変更したカウンターも盤面・相手側へ同期する
+            updateCounterEverywhere(card.instanceId, counters);
+
+            const updatedCard = findBoardCard(card.instanceId);
+            if (updatedCard) {
+                sendCounterUpdate(updatedCard);
+            }
         }
 
         addLog(`${getCardLabel(card)}の${label}を${oldValue}から${newValue}に変更しました。`);
@@ -3937,22 +3946,6 @@ function executeContextAction(action) {
         });
 
         addLog(`${getCardLabel(card)}を裏向きにしました。`);
-    }
-
-    // ★ カウンター追加
-    else if (action.startsWith("add-counter-")) {
-        const type = action.replace("add-counter-", "");
-        addCounter(card.instanceId, type);
-        closeContextMenu();
-        return;
-    }
-
-    // ★ カウンター削除
-    else if (action.startsWith("remove-counter-")) {
-        const type = action.replace("remove-counter-", "");
-        removeCounter(card.instanceId, type);
-        closeContextMenu();
-        return;
     }
 
     // ★ LvUP：全カウンターを1ずつ上昇
