@@ -279,6 +279,8 @@ function applyGameEvent(event) {
         case "shuffle": applyShuffle(player, payload); break;
         case "remove": applyRemove(player, payload); break;
         case "handRemove": applyHandRemove(player, payload); break;
+        case "returnHand": applyReturnHand(player, payload); break;
+        case "returnDeck": applyReturnDeck(player, payload); break;
     }
 
     renderAll();
@@ -322,6 +324,39 @@ function removeCardEverywhere(target, cardId) {
 
     gameState.boardCards = (gameState.boardCards || []).filter(c => c.instanceId !== cardId);
     gameState.handCards = (gameState.handCards || []).filter(c => c.instanceId !== cardId);
+}
+
+/* =========================================================
+   盤面カードを手札へ戻す同期
+========================================================= */
+function applyReturnHand(player, payload) {
+    const target = getRemoteTarget(player);
+    if (!target) return;
+
+    const card = getOrCreateRemoteCard(target, payload);
+    if (!card) return;
+
+    removeCardEverywhere(target, payload.cardId);
+    card.faceDown = false;
+    target.hand.push(card);
+
+    gameState.handCards = (gameState.handCards || []).filter(c => c.instanceId !== payload.cardId);
+    gameState.handCards.push(card);
+}
+
+/* =========================================================
+   盤面カードをデッキへ戻す同期
+========================================================= */
+function applyReturnDeck(player, payload) {
+    const target = getRemoteTarget(player);
+    if (!target) return;
+
+    const card = getOrCreateRemoteCard(target, payload);
+    if (!card) return;
+
+    removeCardEverywhere(target, payload.cardId);
+    card.faceDown = true;
+    target.deck.unshift(card);
 }
 
 /* =========================================================
@@ -765,6 +800,8 @@ function applyGameEvent(event) {
         case "shuffle": applyShuffle(player, payload); break;
         case "remove": applyRemove(player, payload); break;
         case "handRemove": applyHandRemove(player, payload); break;
+        case "returnHand": applyReturnHand(player, payload); break;
+        case "returnDeck": applyReturnDeck(player, payload); break;
     }
 
     renderAll();
@@ -3958,6 +3995,70 @@ function levelUpSelectedCard() {
 }
 
 /* =========================================================
+   盤面カードを手札へ戻す
+========================================================= */
+function returnCardToHand(instanceId) {
+    const card = findBoardCard(instanceId);
+    if (!card) return false;
+
+    const me = getMyPlayerState();
+    if (!me) return false;
+
+    const boardIndex = me.board.findIndex(c => c.instanceId === instanceId);
+    if (boardIndex === -1) return false;
+
+    saveHistory();
+    const [movedCard] = me.board.splice(boardIndex, 1);
+    movedCard.faceDown = false;
+    me.hand.push(movedCard);
+
+    gameState.boardCards = (gameState.boardCards || []).filter(c => c.instanceId !== instanceId);
+    gameState.handCards = (gameState.handCards || []).filter(c => c.instanceId !== instanceId);
+    gameState.handCards.push(movedCard);
+
+    sendGameEvent("returnHand", {
+        cardId: movedCard.instanceId,
+        card: JSON.parse(JSON.stringify(movedCard))
+    });
+    sendStateSnapshot();
+
+    addLog(`${getCardLabel(movedCard)}を手札に戻しました。`);
+    renderAll();
+    return true;
+}
+
+/* =========================================================
+   盤面カードをデッキへ戻す
+========================================================= */
+function returnCardToDeck(instanceId) {
+    const card = findBoardCard(instanceId);
+    if (!card) return false;
+
+    const me = getMyPlayerState();
+    if (!me) return false;
+
+    const boardIndex = me.board.findIndex(c => c.instanceId === instanceId);
+    if (boardIndex === -1) return false;
+
+    saveHistory();
+    const [movedCard] = me.board.splice(boardIndex, 1);
+    movedCard.faceDown = true;
+    me.deck.unshift(movedCard);
+
+    gameState.boardCards = (gameState.boardCards || []).filter(c => c.instanceId !== instanceId);
+
+    sendGameEvent("returnDeck", {
+        cardId: movedCard.instanceId,
+        card: JSON.parse(JSON.stringify(movedCard))
+    });
+    sendStateSnapshot();
+
+    addLog(`${getCardLabel(movedCard)}をデッキに戻しました。`);
+    renderAll();
+    return true;
+}
+
+/* =========================================================
    右クリック操作
 ========================================================= */
 function executeContextAction(action) {
@@ -3995,6 +4096,20 @@ function executeContextAction(action) {
         });
 
         addLog(`${getCardLabel(card)}を裏向きにしました。`);
+    }
+
+    // ★ 手札に戻す
+    else if (action === "return-hand") {
+        returnCardToHand(card.instanceId);
+        closeContextMenu();
+        return;
+    }
+
+    // ★ デッキに戻す
+    else if (action === "return-deck") {
+        returnCardToDeck(card.instanceId);
+        closeContextMenu();
+        return;
     }
 
     // ★ LvUP：全カウンターを1ずつ上昇
