@@ -217,10 +217,20 @@ function applyStateSnapshot(snapshot, senderPlayer) {
 
     // スナップショットを送ってきたプレイヤーの状態だけを更新する。
     // 自分の状態まで上書きしないことで、同時にゲーム開始した場合の競合を防ぐ。
+    const uniqueByInstanceId = list => {
+        const seen = new Set();
+        return (Array.isArray(list) ? list : []).filter(card => {
+            const id = card?.instanceId;
+            if (!id || seen.has(id)) return false;
+            seen.add(id);
+            return true;
+        });
+    };
+
     gameState[senderPlayer] = {
-        deck: remote.deck || [],
-        hand: remote.hand || [],
-        board: remote.board || []
+        deck: uniqueByInstanceId(remote.deck),
+        hand: uniqueByInstanceId(remote.hand),
+        board: uniqueByInstanceId(remote.board)
     };
 
     if (clone.pp) {
@@ -1008,19 +1018,25 @@ function applyCounter(player, payload) {
 }
 function applyInitial(player, payload) {
     const target = getRemoteTarget(player);
-    if (!target) return;
+    if (!target || !payload?.cardId) return;
 
-    const card = getOrCreateRemoteCard(target, payload);
+    // 同じ初期配置イベントが複数回届いても、同一instanceIdは1枚だけにする。
+    let card = getOrCreateRemoteCard(target, payload);
+    if (!card && payload.card) {
+        card = JSON.parse(JSON.stringify(payload.card));
+    }
     if (!card) return;
 
     removeCardEverywhere(target, payload.cardId);
 
+    card.instanceId = payload.cardId;
+    card.owner = card.owner || player;
     card.x = Number(payload.x ?? card.x ?? 0);
     card.y = Number(payload.y ?? card.y ?? 0);
     card.faceDown = !!payload.faceDown;
 
     target.board.push(card);
-    gameState.boardCards.push(card);
+    rebuildBoardCardsUnique();
 }
 
 /* =========================================================
@@ -1308,7 +1324,7 @@ async function startGame(role) {
             /*
                全体盤面管理にも登録
             */
-            gameState.boardCards.push(initialCard);
+            rebuildBoardCardsUnique();
 
             sendGameEvent("initial", {
                 cardId: initialCard.instanceId,
@@ -1362,7 +1378,7 @@ async function startGame(role) {
         };
 
         player.board.push(startCard6001);
-        gameState.boardCards.push(startCard6001);
+        rebuildBoardCardsUnique();
 
         sendGameEvent("initial", {
             cardId: startCard6001.instanceId,
@@ -2173,6 +2189,20 @@ function getCardOwner(card) {
     return null;
 }
 
+function rebuildBoardCardsUnique() {
+    const seen = new Set();
+    const merged = [];
+    const add = card => {
+        if (!card || !card.instanceId || seen.has(card.instanceId)) return;
+        seen.add(card.instanceId);
+        merged.push(card);
+    };
+    (gameState.player1?.board || []).forEach(add);
+    (gameState.player2?.board || []).forEach(add);
+    gameState.boardCards = merged;
+    return merged;
+}
+
 function renderBoard() {
 
     const boardCardsElement =
@@ -2184,7 +2214,7 @@ function renderBoard() {
 
     boardCardsElement.innerHTML = "";
 
-    const board = gameState.boardCards;
+    const board = rebuildBoardCardsUnique();
 
     board.forEach(card => {
        
@@ -3785,6 +3815,24 @@ function setupContextMenu() {
         return;
     }
 
+
+    // 古いHTMLを使っていても、右クリックメニューに
+    // 「手札に戻す」「デッキに戻す」が必ず存在するようにする。
+    const ensureButton = (action, label, beforeAction = null) => {
+        if (menu.querySelector(`button[data-action="${action}"]`)) return;
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.action = action;
+        button.textContent = label;
+        const before = beforeAction
+            ? menu.querySelector(`button[data-action="${beforeAction}"]`)
+            : null;
+        if (before) menu.insertBefore(button, before);
+        else menu.appendChild(button);
+    };
+
+    ensureButton("return-hand", "手札に戻す", "level-up");
+    ensureButton("return-deck", "デッキに戻す", "stack");
 
     const buttons =
         menu.querySelectorAll(
