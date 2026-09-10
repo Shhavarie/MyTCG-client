@@ -160,13 +160,11 @@ function applyCounter(player, payload) {
 
     updateCounterEverywhere(cardId, targetCard.counters);
 
-    let globalCard = (gameState.boardCards || []).find(c => c.instanceId === cardId);
-    if (!globalCard) {
-        globalCard = JSON.parse(JSON.stringify(targetCard));
-        gameState.boardCards.push(globalCard);
-    } else {
-        globalCard.counters = JSON.parse(JSON.stringify(targetCard.counters || {}));
-    }
+    // 相手側配列を表示元にして盤面配列を再構築
+    gameState.boardCards = [
+        ...(gameState.player1?.board || []),
+        ...(gameState.player2?.board || [])
+    ];
 }
 /* =========================================================
    同期初期配置
@@ -479,13 +477,11 @@ function applyCounter(player, payload) {
 
     updateCounterEverywhere(cardId, targetCard.counters);
 
-    let globalCard = (gameState.boardCards || []).find(c => c.instanceId === cardId);
-    if (!globalCard) {
-        globalCard = JSON.parse(JSON.stringify(targetCard));
-        gameState.boardCards.push(globalCard);
-    } else {
-        globalCard.counters = JSON.parse(JSON.stringify(targetCard.counters || {}));
-    }
+    // 相手側配列を表示元にして盤面配列を再構築
+    gameState.boardCards = [
+        ...(gameState.player1?.board || []),
+        ...(gameState.player2?.board || [])
+    ];
 }
 
 /* =========================================================
@@ -650,13 +646,11 @@ function applyCounter(player, payload) {
 
     updateCounterEverywhere(cardId, targetCard.counters);
 
-    let globalCard = (gameState.boardCards || []).find(c => c.instanceId === cardId);
-    if (!globalCard) {
-        globalCard = JSON.parse(JSON.stringify(targetCard));
-        gameState.boardCards.push(globalCard);
-    } else {
-        globalCard.counters = JSON.parse(JSON.stringify(targetCard.counters || {}));
-    }
+    // 相手側配列を表示元にして盤面配列を再構築
+    gameState.boardCards = [
+        ...(gameState.player1?.board || []),
+        ...(gameState.player2?.board || [])
+    ];
 }
 /* =========================================================
    同期初期配置
@@ -969,13 +963,11 @@ function applyCounter(player, payload) {
 
     updateCounterEverywhere(cardId, targetCard.counters);
 
-    let globalCard = (gameState.boardCards || []).find(c => c.instanceId === cardId);
-    if (!globalCard) {
-        globalCard = JSON.parse(JSON.stringify(targetCard));
-        gameState.boardCards.push(globalCard);
-    } else {
-        globalCard.counters = JSON.parse(JSON.stringify(targetCard.counters || {}));
-    }
+    // 相手側配列を表示元にして盤面配列を再構築
+    gameState.boardCards = [
+        ...(gameState.player1?.board || []),
+        ...(gameState.player2?.board || [])
+    ];
 }
 function applyInitial(player, payload) {
     const target = getRemoteTarget(player);
@@ -2142,19 +2134,31 @@ function renderBoard() {
                 );
             }
 
-            cardElement.style.left =
-                `${card.x}px`;
-
             const owner = getCardOwner(card);
             const isOpponent = owner && owner !== currentRole;
             const boardElement = document.getElementById("board");
-            const cardHeight = 126;
-            const displayY = isOpponent && boardElement
-                ? Math.max(0, boardElement.clientHeight - Number(card.y || 0) - cardHeight - 50)
-                : Number(card.y || 0);
 
-            cardElement.style.top =
-                `${displayY}px`;
+            // 相手カードは「ボード中央」を軸に180度の鏡写しにする。
+            // ボード背景画像のサイズが変わっても、実際のボード寸法を基準にする。
+            const boardWidth = boardElement ? boardElement.clientWidth : 800;
+            const boardHeight = boardElement ? boardElement.clientHeight : 800;
+            const computedCardStyle = getComputedStyle(cardElement);
+            const cardWidth = parseFloat(computedCardStyle.width) || 90;
+            const cardHeight = parseFloat(computedCardStyle.height) || 126;
+
+            const sourceX = Number(card.x || 0);
+            const sourceY = Number(card.y || 0);
+
+            const displayX = isOpponent
+                ? boardWidth - sourceX - cardWidth
+                : sourceX;
+
+            const displayY = isOpponent
+                ? boardHeight - sourceY - cardHeight + 50
+                : sourceY;
+
+            cardElement.style.left = `${displayX}px`;
+            cardElement.style.top = `${displayY}px`;
 
             const localRotation = card.rotated ? 90 : 0;
             const facingRotation = isOpponent ? 180 : 0;
@@ -3787,34 +3791,112 @@ function closeContextMenu() {
     contextTargetCardId =
         null;
 }
-function updateCounterEverywhere(instanceId, counters) {
-    const copies = [];
-    const addCopy = c => {
-        if (c && c.instanceId === instanceId && !copies.includes(c)) copies.push(c);
+function cloneCounters(counters) {
+    return {
+        green: Number(counters?.green || 0),
+        red: Number(counters?.red || 0),
+        white: Number(counters?.white || 0),
+        blue: Number(counters?.blue || 0),
+        yellow: Number(counters?.yellow || 0)
     };
-    addCopy(gameState.boardCards?.find(c => c.instanceId === instanceId));
-    addCopy(gameState.player1?.board?.find(c => c.instanceId === instanceId));
-    addCopy(gameState.player2?.board?.find(c => c.instanceId === instanceId));
-    const next = JSON.parse(JSON.stringify(counters || {}));
-    copies.forEach(c => { c.counters = JSON.parse(JSON.stringify(next)); });
+}
+
+function updateCounterEverywhere(instanceId, counters) {
+    const next = cloneCounters(counters);
+    const seen = new Set();
+
+    const apply = list => {
+        if (!Array.isArray(list)) return;
+        const card = list.find(c => c && c.instanceId === instanceId);
+        if (card) {
+            card.counters = cloneCounters(next);
+            seen.add(card);
+        }
+    };
+
+    apply(gameState.boardCards);
+    apply(gameState.player1?.board);
+    apply(gameState.player2?.board);
+
+    // どの配列にもまだ存在しない場合は、現在の盤面カードを基準にする。
+    if (!seen.size) {
+        const source = findCardOnBoard(instanceId);
+        if (source) source.counters = cloneCounters(next);
+    }
+
+    // player1 / player2 の盤面から全体盤面を再構築し、表示元を一本化する。
+    gameState.boardCards = [
+        ...(gameState.player1?.board || []),
+        ...(gameState.player2?.board || [])
+    ];
+}
+
+function sendCounterUpdate(card) {
+    if (!card) return;
+
+    const counters = cloneCounters(card.counters);
+    const payloadCard = JSON.parse(JSON.stringify({ ...card, counters }));
+
+    sendGameEvent("counter", {
+        cardId: card.instanceId,
+        counters,
+        card: payloadCard
+    });
+
+    sendStateSnapshot();
 }
 
 function addCounter(instanceId, type) {
     const card = findBoardCard(instanceId);
-    if (!card || !COUNTER_TYPES[type]) return;
-    const counters = { ...(card.counters || {}) };
-    counters[type] = Number(counters[type] || 0) + 1;
+    if (!card || !COUNTER_TYPES[type]) return false;
+
+    saveHistory();
+
+    const counters = cloneCounters(card.counters);
+    counters[type] += 1;
     updateCounterEverywhere(instanceId, counters);
+
+    const updated = findBoardCard(instanceId);
+    sendCounterUpdate(updated);
     renderAll();
+    return true;
 }
 
 function removeCounter(instanceId, type) {
     const card = findBoardCard(instanceId);
-    if (!card || !COUNTER_TYPES[type]) return;
-    const counters = { ...(card.counters || {}) };
-    counters[type] = Number(counters[type] || 0) - 1;
+    if (!card || !COUNTER_TYPES[type]) return false;
+
+    saveHistory();
+
+    const counters = cloneCounters(card.counters);
+    counters[type] -= 1;
     updateCounterEverywhere(instanceId, counters);
+
+    const updated = findBoardCard(instanceId);
+    sendCounterUpdate(updated);
     renderAll();
+    return true;
+}
+
+// 選択カードの全種類のカウンターを1ずつ増やす
+function levelUpSelectedCard() {
+    const card = findBoardCard(gameState.selectedCardId);
+    if (!card) return false;
+
+    saveHistory();
+
+    const counters = cloneCounters(card.counters);
+    Object.keys(COUNTER_TYPES).forEach(type => {
+        counters[type] += 1;
+    });
+
+    updateCounterEverywhere(card.instanceId, counters);
+
+    const updated = findBoardCard(card.instanceId);
+    sendCounterUpdate(updated);
+    addLog(`${getCardLabel(updated)}のLvUP：全カウンターを1上昇しました。`);
+    renderAll();
+    return true;
 }
 
 /* =========================================================
@@ -3860,38 +3942,24 @@ function executeContextAction(action) {
     // ★ カウンター追加
     else if (action.startsWith("add-counter-")) {
         const type = action.replace("add-counter-", "");
-
         addCounter(card.instanceId, type);
-
-        // ★★★ オンライン同期 ★★★
-        sendGameEvent("counter", {
-            cardId: card.instanceId,
-            color: type,
-            value: +1,
-            counters: JSON.parse(JSON.stringify(card.counters || {})),
-            card: JSON.parse(JSON.stringify(card))
-        });
-        sendStateSnapshot();
-        renderAll();
+        closeContextMenu();
         return;
     }
 
     // ★ カウンター削除
     else if (action.startsWith("remove-counter-")) {
         const type = action.replace("remove-counter-", "");
-
         removeCounter(card.instanceId, type);
+        closeContextMenu();
+        return;
+    }
 
-        // ★★★ オンライン同期 ★★★
-        sendGameEvent("counter", {
-            cardId: card.instanceId,
-            color: type,
-            value: -1,
-            counters: JSON.parse(JSON.stringify(card.counters || {})),
-            card: JSON.parse(JSON.stringify(card))
-        });
-        sendStateSnapshot();
-        renderAll();
+    // ★ LvUP：全カウンターを1ずつ上昇
+    else if (action === "level-up") {
+        gameState.selectedCardId = card.instanceId;
+        levelUpSelectedCard();
+        closeContextMenu();
         return;
     }
 
