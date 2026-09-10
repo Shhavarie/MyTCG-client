@@ -1263,8 +1263,8 @@ async function startGame(role) {
                 "初期配置カード:",
                 initialCard
             );
-   initialCard.x = 350;
-    initialCard.y = 600;
+            initialCard.x = 350;
+            initialCard.y = 600;
 
             player.board.push(initialCard);
 
@@ -1287,6 +1287,55 @@ async function startGame(role) {
                 "初期配置カードが選択されませんでした。"
             );
         }
+
+        /* -----------------------------------------------------
+           ★ ゲーム開始時に 6001 を自動で1枚盤面へ配置
+           デッキには入れず、各プレイヤーの盤面に1枚だけ作成する。
+        ----------------------------------------------------- */
+        const startCard6001 = {
+            instanceId: (() => {
+                const uuid = (typeof crypto !== "undefined" && crypto.randomUUID)
+                    ? crypto.randomUUID()
+                    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+                return `card-${currentRole || "local"}-start-6001-${uuid}`;
+            })(),
+            owner: currentRole || "unknown",
+            cardId: "6001",
+            image: "./img/cards/6item/6001.png",
+            type: "normal",
+            baseStats: {
+                hp: 0,
+                attack: 0,
+                defense: 0,
+                magic: 0,
+                resistance: 0
+            },
+            counters: {
+                green: 0,
+                red: 0,
+                white: 0,
+                blue: 0,
+                yellow: 0
+            },
+            faceDown: false,
+            rotated: false,
+            rotation: false,
+            x: 350,
+            y: 600
+        };
+
+        player.board.push(startCard6001);
+        gameState.boardCards.push(startCard6001);
+
+        sendGameEvent("initial", {
+            cardId: startCard6001.instanceId,
+            x: startCard6001.x,
+            y: startCard6001.y,
+            faceDown: false,
+            card: JSON.parse(JSON.stringify(startCard6001))
+        });
+
+        addLog("ゲーム開始時にカード6001を盤面に配置しました。");
 
         /* -----------------------------------------------------
            残りのデッキをシャッフル
@@ -4119,10 +4168,10 @@ function renderPP() {
 
 function rollDice() {
 
-    const result =
-        Math.floor(
-            Math.random() * 6
-        ) + 1;
+    // 2d6
+    const die1 = Math.floor(Math.random() * 6) + 1;
+    const die2 = Math.floor(Math.random() * 6) + 1;
+    const result = die1 + die2;
 
 
     const resultElement =
@@ -4156,7 +4205,7 @@ function rollDice() {
 
 
     addLog(
-        `ダイスを振って${result}が出ました。`
+        `2D6を振って ${die1} + ${die2} = ${result} が出ました。`
     );
 
 
