@@ -426,7 +426,9 @@ function applyCounter(player, payload) {
 
     // カウンターの最終状態を同期する。
     // 増減イベントだけに依存せず、送信側のカード状態を正とする。
-    if (payload.card && payload.card.counters) {
+    if (payload.counters) {
+        card.counters = JSON.parse(JSON.stringify(payload.counters));
+    } else if (payload.card && payload.card.counters) {
         card.counters = JSON.parse(JSON.stringify(payload.card.counters));
     } else {
         if (!card.counters) card.counters = {};
@@ -434,10 +436,12 @@ function applyCounter(player, payload) {
         card.counters[type] = (card.counters[type] || 0) + Number(payload.value || 0);
     }
 
-    const globalCard = gameState.boardCards.find(c => c.instanceId === payload.cardId);
-    if (globalCard && globalCard !== card) {
-        globalCard.counters = JSON.parse(JSON.stringify(card.counters));
-    } else if (!globalCard) {
+    const syncedCounters = JSON.parse(JSON.stringify(card.counters || {}));
+    [gameState.boardCards, target.board].forEach(list => {
+        const copy = (list || []).find(c => c.instanceId === payload.cardId);
+        if (copy) copy.counters = JSON.parse(JSON.stringify(syncedCounters));
+    });
+    if (!gameState.boardCards.some(c => c.instanceId === payload.cardId)) {
         gameState.boardCards.push(card);
     }
 }
@@ -965,7 +969,7 @@ const COUNTER_TYPES = {
 function injectV7Styles() {
     if (document.getElementById("v7-online-sync-styles")) return;
     const style = document.createElement("style"); style.id = "v7-online-sync-styles";
-    style.textContent = `#deck{position:relative}.deck-search-button{display:block;margin:8px auto;padding:6px 12px;cursor:pointer;position:relative;z-index:20}#deck-search-modal{position:fixed;inset:0;z-index:99999;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.55)}.deck-search-panel{width:min(720px,90vw);max-height:85vh;overflow:auto;background:#fff;border-radius:10px;padding:16px;box-sizing:border-box}.deck-search-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.deck-search-panel input{width:100%;box-sizing:border-box;padding:9px;margin-bottom:10px}.deck-search-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}.deck-search-card{display:flex;flex-direction:column;align-items:center;gap:5px;padding:6px;cursor:pointer;background:#fff;border:1px solid #ccc;border-radius:6px}.deck-search-card img{width:90px;height:126px;object-fit:contain}.deck-search-card span{font-size:12px;text-align:center}`;
+    style.textContent = `#deck{position:relative}.deck-search-button{display:block;margin:8px auto 8px 50px;padding:6px 12px;cursor:pointer;position:relative;z-index:20}#deck-search-modal{position:fixed;inset:0;z-index:99999;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.55)}.deck-search-panel{width:min(720px,90vw);max-height:85vh;overflow:auto;background:#fff;border-radius:10px;padding:16px;box-sizing:border-box}.deck-search-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.deck-search-panel input{width:100%;box-sizing:border-box;padding:9px;margin-bottom:10px}.deck-search-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}.deck-search-card{display:flex;flex-direction:column;align-items:center;gap:5px;padding:6px;cursor:pointer;background:#fff;border:1px solid #ccc;border-radius:6px}.deck-search-card img{width:90px;height:126px;object-fit:contain}.deck-search-card span{font-size:12px;text-align:center}`;
     document.head.appendChild(style);
 }
 
@@ -2048,14 +2052,19 @@ function renderBoard() {
                 );
             }
 
-            cardElement.style.left =
-                `${card.x}px`;
-
-            cardElement.style.top =
-                `${card.y}px`;
-
             const owner = getCardOwner(card);
             const isOpponent = owner && owner !== currentRole;
+            const boardElement = document.getElementById("board");
+            const cardHeight = 126;
+            const displayY = isOpponent && boardElement
+                ? Math.max(0, boardElement.clientHeight - Number(card.y || 0) - cardHeight)
+                : Number(card.y || 0);
+
+            cardElement.style.left =
+                `${Number(card.x || 0)}px`;
+
+            cardElement.style.top =
+                `${displayY}px`;
             const localRotation = card.rotated ? 90 : 0;
             const facingRotation = isOpponent ? 180 : 0;
             cardElement.style.setProperty(
@@ -2127,38 +2136,22 @@ function renderBoard() {
 cardElement.addEventListener(
     "click",
     event => {
-
         event.stopPropagation();
+
+        // click の detail=2 を利用して確実にダブルクリック回転する。
+        if (event.detail === 2) {
+            rotateCard(card.instanceId);
+            return;
+        }
 
         // 裏向きカードは選択・詳細表示しない
         if (card.faceDown) {
             return;
         }
 
-        selectCard(
-            card.instanceId
-        );
-
+        selectCard(card.instanceId);
     }
 );
-
-
-            /* =========================
-               ダブルクリック＝横向き
-            ========================== */
-
-            cardElement.addEventListener(
-                "dblclick",
-                event => {
-
-                    event.stopPropagation();
-
-                    rotateCard(
-                        card.instanceId
-                    );
-
-                }
-            );
 
 
             /* =========================
@@ -2886,7 +2879,8 @@ function drawCard(faceDown = false) {
     // ★★★ オンライン同期（draw）★★★
     sendGameEvent("draw", {
         cardId: card.instanceId,
-        faceDown: !!card.faceDown
+        faceDown: !!card.faceDown,
+        card: JSON.parse(JSON.stringify(card))
     });
 
     // ログ
@@ -3670,19 +3664,33 @@ function closeContextMenu() {
     contextTargetCardId =
         null;
 }
+function updateCounterEverywhere(instanceId, counters) {
+    const copies = [];
+    const addCopy = c => {
+        if (c && c.instanceId === instanceId && !copies.includes(c)) copies.push(c);
+    };
+    addCopy(gameState.boardCards?.find(c => c.instanceId === instanceId));
+    addCopy(gameState.player1?.board?.find(c => c.instanceId === instanceId));
+    addCopy(gameState.player2?.board?.find(c => c.instanceId === instanceId));
+    const next = JSON.parse(JSON.stringify(counters || {}));
+    copies.forEach(c => { c.counters = JSON.parse(JSON.stringify(next)); });
+}
+
 function addCounter(instanceId, type) {
     const card = findBoardCard(instanceId);
     if (!card || !COUNTER_TYPES[type]) return;
-    if (!card.counters) card.counters = {};
-    card.counters[type] = Number(card.counters[type] || 0) + 1;
+    const counters = { ...(card.counters || {}) };
+    counters[type] = Number(counters[type] || 0) + 1;
+    updateCounterEverywhere(instanceId, counters);
     renderAll();
 }
 
 function removeCounter(instanceId, type) {
     const card = findBoardCard(instanceId);
     if (!card || !COUNTER_TYPES[type]) return;
-    if (!card.counters) card.counters = {};
-    card.counters[type] = Number(card.counters[type] || 0) - 1;
+    const counters = { ...(card.counters || {}) };
+    counters[type] = Number(counters[type] || 0) - 1;
+    updateCounterEverywhere(instanceId, counters);
     renderAll();
 }
 
@@ -3737,6 +3745,7 @@ function executeContextAction(action) {
             cardId: card.instanceId,
             color: type,
             value: +1,
+            counters: JSON.parse(JSON.stringify(card.counters || {})),
             card: JSON.parse(JSON.stringify(card))
         });
         sendStateSnapshot();
@@ -3755,6 +3764,7 @@ function executeContextAction(action) {
             cardId: card.instanceId,
             color: type,
             value: -1,
+            counters: JSON.parse(JSON.stringify(card.counters || {})),
             card: JSON.parse(JSON.stringify(card))
         });
         sendStateSnapshot();
