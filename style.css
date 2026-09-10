@@ -403,6 +403,8 @@ button {
     object-position: center;
 }
 
+
+
 /* =========================================================
    ボード上カード領域
 ========================================================= */
@@ -417,8 +419,8 @@ button {
 ========================================================= */
 .board-card {
     position: absolute;
-    width: 75px;
-    height: 110px;
+    width: 90px;
+    height: 126px;
     border: 2px solid transparent;
     border-radius: 6px;
     background: #222222;
