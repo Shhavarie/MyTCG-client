@@ -118,7 +118,7 @@ function applyRotate(player, payload) {
     }
     if (!targetCard) return;
 
-    targetCard.rotated = !!(payload.card ? payload.card.rotated : payload.rotation);
+    targetCard.rotated = !!(payload.card ? (payload.card.rotated ?? payload.card.rotation) : (payload.rotated ?? payload.rotation));
     targetCard.rotation = targetCard.rotated;
 
     let globalCard = (gameState.boardCards || []).find(c => c.instanceId === cardId);
@@ -436,7 +436,7 @@ function applyRotate(player, payload) {
     }
     if (!targetCard) return;
 
-    targetCard.rotated = !!(payload.card ? payload.card.rotated : payload.rotation);
+    targetCard.rotated = !!(payload.card ? (payload.card.rotated ?? payload.card.rotation) : (payload.rotated ?? payload.rotation));
     targetCard.rotation = targetCard.rotated;
 
     let globalCard = (gameState.boardCards || []).find(c => c.instanceId === cardId);
@@ -608,7 +608,7 @@ function applyRotate(player, payload) {
     }
     if (!targetCard) return;
 
-    targetCard.rotated = !!(payload.card ? payload.card.rotated : payload.rotation);
+    targetCard.rotated = !!(payload.card ? (payload.card.rotated ?? payload.card.rotation) : (payload.rotated ?? payload.rotation));
     targetCard.rotation = targetCard.rotated;
 
     let globalCard = (gameState.boardCards || []).find(c => c.instanceId === cardId);
@@ -926,7 +926,7 @@ function applyRotate(player, payload) {
     }
     if (!targetCard) return;
 
-    targetCard.rotated = !!(payload.card ? payload.card.rotated : payload.rotation);
+    targetCard.rotated = !!(payload.card ? (payload.card.rotated ?? payload.card.rotation) : (payload.rotated ?? payload.rotation));
     targetCard.rotation = targetCard.rotated;
 
     let globalCard = (gameState.boardCards || []).find(c => c.instanceId === cardId);
@@ -2043,7 +2043,7 @@ function getCounterBonus(
 
             bonus +=
                 Number(
-                    card.counters[counterType] || 0
+                    (card.counters || {})[counterType] || 0
                 );
         }
     }
@@ -2150,7 +2150,7 @@ function renderBoard() {
             const boardElement = document.getElementById("board");
             const cardHeight = 126;
             const displayY = isOpponent && boardElement
-                ? Math.max(0, boardElement.clientHeight - Number(card.y || 0) - cardHeight - 100)
+                ? Math.max(0, boardElement.clientHeight - Number(card.y || 0) - cardHeight - 50)
                 : Number(card.y || 0);
 
             cardElement.style.top =
@@ -2422,7 +2422,7 @@ function createCounterDisplay(
 
         const count =
             Number(
-                card.counters[counterType] || 0
+                (card.counters || {})[counterType] || 0
             );
 
 
@@ -2492,28 +2492,46 @@ function clearCardSelection() {
 ========================================================= */
 
 function rotateCard(instanceId) {
-
     const card = findBoardCard(instanceId);
     if (!card) return;
 
     saveHistory();
 
-    // ローカル更新
-    card.rotated = !card.rotated;
+    // 回転状態を必ず boolean で保持
+    card.rotated = !Boolean(card.rotated);
+    card.rotation = card.rotated;
 
-    // ★★★ オンライン同期 ★★★
+    // player1 / player2 側に別オブジェクトが存在する場合も同期
+    updateRotationEverywhere(card.instanceId, card.rotated);
+
+    const payloadCard = JSON.parse(JSON.stringify(card));
     sendGameEvent("rotate", {
         cardId: card.instanceId,
         rotation: card.rotated,
-        card: JSON.parse(JSON.stringify(card))
+        rotated: card.rotated,
+        card: payloadCard
     });
 
     addLog(
         `${getCardLabel(card)}を${card.rotated ? "横向き" : "縦向き"}にしました。`
     );
 
-    renderBoard();
+    renderAll();
     sendStateSnapshot();
+}
+
+function updateRotationEverywhere(instanceId, rotated) {
+    const apply = list => {
+        if (!Array.isArray(list)) return;
+        const target = list.find(c => c.instanceId === instanceId);
+        if (target) {
+            target.rotated = Boolean(rotated);
+            target.rotation = Boolean(rotated);
+        }
+    };
+    apply(gameState.boardCards);
+    apply(gameState.player1?.board);
+    apply(gameState.player2?.board);
 }
 
 /* =========================================================
@@ -2536,6 +2554,12 @@ function setupBoardCardDrag(element, card) {
 
     element.addEventListener("mousedown", event => {
         if (event.button !== 0) return;
+
+        // ダブルクリックはドラッグ開始より先に回転処理へ渡す
+        if (event.detail >= 2) {
+            event.preventDefault();
+            return;
+        }
 
         const board = document.getElementById("board");
         if (!board) return;
