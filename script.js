@@ -103,13 +103,6 @@ function applyHandFlip(player, payload) {
 /* =========================================================
   同期回転
 ========================================================= */
-function findCardOnBoard(instanceId) {
-    return gameState.boardCards?.find(c => c.instanceId === instanceId)
-        || gameState.player1?.board?.find(c => c.instanceId === instanceId)
-        || gameState.player2?.board?.find(c => c.instanceId === instanceId)
-        || null;
-}
-
 function applyRotate(player, payload) {
     const target = getRemoteTarget(player);
     if (!target) return;
@@ -147,8 +140,6 @@ function applyCounter(player, payload) {
     const cardId = payload?.cardId;
     if (!cardId) return;
 
-    // まず相手プレイヤー側の盤面から対象カードを取得。
-    // 見つからなければイベントに含まれるカード情報から復元する。
     let targetCard = (target.board || []).find(c => c.instanceId === cardId);
     if (!targetCard && payload.card) {
         targetCard = JSON.parse(JSON.stringify(payload.card));
@@ -157,17 +148,18 @@ function applyCounter(player, payload) {
     }
     if (!targetCard) return;
 
-    // 送信側が持っている「現在のカウンター数」をそのまま反映する。
     if (payload.card && payload.card.counters) {
         targetCard.counters = JSON.parse(JSON.stringify(payload.card.counters));
+    } else if (payload.counters) {
+        targetCard.counters = JSON.parse(JSON.stringify(payload.counters));
     } else {
         targetCard.counters = targetCard.counters || {};
         const type = payload.color;
-        targetCard.counters[type] =
-            Number(targetCard.counters[type] || 0) + Number(payload.value || 0);
+        targetCard.counters[type] = Number(targetCard.counters[type] || 0) + Number(payload.value || 0);
     }
 
-    // 描画用の共有盤面にも同じ値を反映する。
+    updateCounterEverywhere(cardId, targetCard.counters);
+
     let globalCard = (gameState.boardCards || []).find(c => c.instanceId === cardId);
     if (!globalCard) {
         globalCard = JSON.parse(JSON.stringify(targetCard));
@@ -454,6 +446,122 @@ function applyRotate(player, payload) {
     } else {
         globalCard.rotated = targetCard.rotated;
         globalCard.rotation = targetCard.rotation;
+    }
+}
+
+/* =========================================================
+  同期カウンター
+========================================================= */
+function applyCounter(player, payload) {
+    const target = getRemoteTarget(player);
+    if (!target) return;
+
+    const cardId = payload?.cardId;
+    if (!cardId) return;
+
+    let targetCard = (target.board || []).find(c => c.instanceId === cardId);
+    if (!targetCard && payload.card) {
+        targetCard = JSON.parse(JSON.stringify(payload.card));
+        target.board = target.board || [];
+        target.board.push(targetCard);
+    }
+    if (!targetCard) return;
+
+    if (payload.card && payload.card.counters) {
+        targetCard.counters = JSON.parse(JSON.stringify(payload.card.counters));
+    } else if (payload.counters) {
+        targetCard.counters = JSON.parse(JSON.stringify(payload.counters));
+    } else {
+        targetCard.counters = targetCard.counters || {};
+        const type = payload.color;
+        targetCard.counters[type] = Number(targetCard.counters[type] || 0) + Number(payload.value || 0);
+    }
+
+    updateCounterEverywhere(cardId, targetCard.counters);
+
+    let globalCard = (gameState.boardCards || []).find(c => c.instanceId === cardId);
+    if (!globalCard) {
+        globalCard = JSON.parse(JSON.stringify(targetCard));
+        gameState.boardCards.push(globalCard);
+    } else {
+        globalCard.counters = JSON.parse(JSON.stringify(targetCard.counters || {}));
+    }
+}
+
+/* =========================================================
+  v6 根本修正版
+  - プレイヤー間で衝突しないグローバル一意 instanceId
+  - 相手デッキをローカル生成しない
+  - イベントにカード実体を同梱して到着順・初期同期に強くする
+  - stateSnapshot が相手の deckCode / 自分のデッキを上書きしない
+========================================================= */
+
+/* =========================================================
+  同期ドロー
+========================================================= */
+function applyDraw(player, payload) {
+    const { cardId, faceDown } = payload;
+
+    let deck, hand;
+
+    if (player === "user1") {
+        deck = gameState.player1.deck;
+        hand = gameState.player1.hand;
+    } else {
+        deck = gameState.player2.deck;
+        hand = gameState.player2.hand;
+    }
+
+    // デッキから該当カードを探す
+    const card = deck.find(c => c.instanceId === cardId);
+    if (!card) return;
+
+    // デッキから削除
+    deck.splice(deck.indexOf(card), 1);
+
+    // 裏向き設定
+    card.faceDown = faceDown;
+
+    // 手札に追加
+    if (!hand.some(c => c.instanceId === cardId)) {
+        hand.push(card);
+    }
+    if (!gameState.handCards.some(c => c.instanceId === cardId)) {
+        gameState.handCards.push(card);
+    }
+}/* =========================================================
+  同期カード移動
+========================================================= */
+function applyMove(player, payload) {
+    const { cardId, x, y } = payload;
+
+    const card = findCardOnBoard(cardId);
+    if (!card) return;
+
+    card.x = x;
+    card.y = y;
+
+    const target = player === "user1" ? gameState.player1 : gameState.player2;
+    const ownedCard = target?.board?.find(c => c.instanceId === cardId);
+    if (ownedCard && ownedCard !== card) {
+        ownedCard.x = x;
+        ownedCard.y = y;
+    }
+}/* =========================================================
+  同期裏向き
+========================================================= */
+function applyFlip(player, payload) {
+    const { cardId, faceDown } = payload;
+
+    const card = findCardOnBoard(cardId);
+    if (!card) return;
+
+    card.faceDown = !!faceDown;
+
+    const target = player === "user1" ? gameState.player1 : gameState.player2;
+    const ownedCard = target?.board?.find(c => c.instanceId === cardId);
+    if (ownedCard && ownedCard !== card) {
+        ownedCard.faceDown = !!faceDown;
     }
 }
 /* =========================================================
@@ -522,8 +630,6 @@ function applyCounter(player, payload) {
     const cardId = payload?.cardId;
     if (!cardId) return;
 
-    // まず相手プレイヤー側の盤面から対象カードを取得。
-    // 見つからなければイベントに含まれるカード情報から復元する。
     let targetCard = (target.board || []).find(c => c.instanceId === cardId);
     if (!targetCard && payload.card) {
         targetCard = JSON.parse(JSON.stringify(payload.card));
@@ -532,17 +638,18 @@ function applyCounter(player, payload) {
     }
     if (!targetCard) return;
 
-    // 送信側が持っている「現在のカウンター数」をそのまま反映する。
     if (payload.card && payload.card.counters) {
         targetCard.counters = JSON.parse(JSON.stringify(payload.card.counters));
+    } else if (payload.counters) {
+        targetCard.counters = JSON.parse(JSON.stringify(payload.counters));
     } else {
         targetCard.counters = targetCard.counters || {};
         const type = payload.color;
-        targetCard.counters[type] =
-            Number(targetCard.counters[type] || 0) + Number(payload.value || 0);
+        targetCard.counters[type] = Number(targetCard.counters[type] || 0) + Number(payload.value || 0);
     }
 
-    // 描画用の共有盤面にも同じ値を反映する。
+    updateCounterEverywhere(cardId, targetCard.counters);
+
     let globalCard = (gameState.boardCards || []).find(c => c.instanceId === cardId);
     if (!globalCard) {
         globalCard = JSON.parse(JSON.stringify(targetCard));
@@ -829,6 +936,650 @@ function applyRotate(player, payload) {
     } else {
         globalCard.rotated = targetCard.rotated;
         globalCard.rotation = targetCard.rotation;
+    }
+}
+
+/* =========================================================
+  同期カウンター
+========================================================= */
+function applyCounter(player, payload) {
+    const target = getRemoteTarget(player);
+    if (!target) return;
+
+    const cardId = payload?.cardId;
+    if (!cardId) return;
+
+    let targetCard = (target.board || []).find(c => c.instanceId === cardId);
+    if (!targetCard && payload.card) {
+        targetCard = JSON.parse(JSON.stringify(payload.card));
+        target.board = target.board || [];
+        target.board.push(targetCard);
+    }
+    if (!targetCard) return;
+
+    if (payload.card && payload.card.counters) {
+        targetCard.counters = JSON.parse(JSON.stringify(payload.card.counters));
+    } else if (payload.counters) {
+        targetCard.counters = JSON.parse(JSON.stringify(payload.counters));
+    } else {
+        targetCard.counters = targetCard.counters || {};
+        const type = payload.color;
+        targetCard.counters[type] = Number(targetCard.counters[type] || 0) + Number(payload.value || 0);
+    }
+
+    updateCounterEverywhere(cardId, targetCard.counters);
+
+    let globalCard = (gameState.boardCards || []).find(c => c.instanceId === cardId);
+    if (!globalCard) {
+        globalCard = JSON.parse(JSON.stringify(targetCard));
+        gameState.boardCards.push(globalCard);
+    } else {
+        globalCard.counters = JSON.parse(JSON.stringify(targetCard.counters || {}));
+    }
+}
+function applyInitial(player, payload) {
+    const target = getRemoteTarget(player);
+    if (!target) return;
+
+    const card = getOrCreateRemoteCard(target, payload);
+    if (!card) return;
+
+    removeCardEverywhere(target, payload.cardId);
+
+    card.x = Number(payload.x ?? card.x ?? 0);
+    card.y = Number(payload.y ?? card.y ?? 0);
+    card.faceDown = !!payload.faceDown;
+
+    target.board.push(card);
+    gameState.boardCards.push(card);
+}
+
+/* =========================================================
+   同期PP
+========================================================= */
+function applyPPChange(player, payload) {
+    const { index, value } = payload;
+
+    gameState.pp[index] = value;
+
+    renderPP();
+}
+
+
+
+
+
+/* =========================================================
+   グローバル変数
+========================================================= */
+let cardDatabase = [];
+let cardDatabaseLoaded = false;
+let currentRole = null;
+let gameState = {
+    role: null,
+    selectedCardId: null,
+    nextCardId: 1,
+    boardCards: [],
+    handCards: [],
+    pp: Array(20).fill(false),
+    history: [],
+    logs: []
+};
+let contextTargetCardId = null;
+
+/* =========================================================
+   カウンターとステータスの対応
+========================================================= */
+const COUNTER_TYPES = {
+    green: {
+        name: "緑",
+        stat: "hp"
+    },
+    red: {
+        name: "赤",
+        stat: "attack"
+    },
+    white: {
+        name: "白",
+        stat: "defense"
+    },
+    blue: {
+        name: "青",
+        stat: "magic"
+    },
+    yellow: {
+        name: "黄",
+        stat: "resistance"
+    }
+};
+
+/* =========================================================
+   v7追加UIスタイル
+========================================================= */
+function injectV7Styles() {
+    if (document.getElementById("v7-online-sync-styles")) return;
+    const style = document.createElement("style"); style.id = "v7-online-sync-styles";
+    style.textContent = `#deck{position:relative}.deck-search-button{display:block;margin:8px auto 8px 100px;padding:6px 12px;cursor:pointer;position:relative;z-index:20}#deck-search-modal{position:fixed;inset:0;z-index:99999;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.55)}.deck-search-panel{width:min(720px,90vw);max-height:85vh;overflow:auto;background:#fff;border-radius:10px;padding:16px;box-sizing:border-box}.deck-search-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.deck-search-panel input{width:100%;box-sizing:border-box;padding:9px;margin-bottom:10px}.deck-search-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}.deck-search-card{display:flex;flex-direction:column;align-items:center;gap:5px;padding:6px;cursor:pointer;background:#fff;border:1px solid #ccc;border-radius:6px}.deck-search-card img{width:90px;height:126px;object-fit:contain}.deck-search-card span{font-size:12px;text-align:center}`;
+    document.head.appendChild(style);
+}
+
+/* =========================================================
+   初期化
+========================================================= */
+document.addEventListener(
+    "DOMContentLoaded",
+    () => {
+        setupHomeButtons();
+        setupGameButtons();
+        setupContextMenu();
+        setupPP();
+        injectV7Styles();
+        setupDeckSearch();
+        document.addEventListener(
+            "click",
+            handleDocumentClick
+        );
+        console.log(
+            "My TCG Simulator 起動"
+        );    });
+
+/* =========================
+   対面
+========================= */
+function getMyPlayerState() {
+
+    if (currentRole === "user1") {
+        return gameState.player1;
+    }
+
+    if (currentRole === "user2") {
+        return gameState.player2;
+    }
+
+    return null;
+}
+
+
+function getOpponentPlayerState() {
+
+    if (currentRole === "user1") {
+        return gameState.player2;
+    }
+
+    if (currentRole === "user2") {
+        return gameState.player1;
+    }
+
+    return null;
+}
+
+/* =========================================================
+   ゲーム開始
+========================================================= */
+async function startGame(role) {
+
+    console.log("ゲーム開始:", role);
+
+    /* ---------------------------------------------------------
+       カードDB読み込み
+    --------------------------------------------------------- */
+    const loaded = await loadCardDatabase();
+
+    if (!loaded) {
+        console.error("カードDBの読み込みに失敗しました。");
+        alert("カードデータの読み込みに失敗しました。");
+        return;
+    }
+
+    /* ---------------------------------------------------------
+       デッキコード取得
+    --------------------------------------------------------- */
+    const deckCode = (gameState.deckCode || "").trim();
+
+    console.log("デッキコード:", deckCode);
+
+    if (!deckCode) {
+        alert("デッキコードが入力されていません。");
+        return;
+    }
+
+    currentRole = role;
+
+    /* ---------------------------------------------------------
+       ゲーム状態を初期化
+    --------------------------------------------------------- */
+    gameState = {
+        player1: {
+            deck: [],
+            hand: [],
+            board: []
+        },
+
+        player2: {
+            deck: [],
+            hand: [],
+            board: []
+        },
+
+        role: role,
+        selectedCardId: null,
+        nextCardId: 1,
+
+        boardCards: [],
+        handCards: [],
+
+        pp: Array(20).fill(false),
+
+        history: [],
+        logs: [],
+
+        deckCode: deckCode
+    };
+
+    /*
+       startGame() 内で gameState を作り直しているので、
+       デバッグ用の window.gameState も更新する
+    */
+    window.gameState = gameState;
+
+    /* ---------------------------------------------------------
+       デッキ構築
+    --------------------------------------------------------- */
+
+    const deck = buildDeckFromCode(deckCode);
+
+    console.log("生成されたデッキ枚数:", deck.length);
+
+    if (deck.length === 0) {
+        alert(
+            "デッキを作成できませんでした。\n" +
+            "デッキコードまたはカードIDを確認してください。"
+        );
+        return;
+    }
+
+    /* ---------------------------------------------------------
+       プレイヤーへデッキをセット
+    --------------------------------------------------------- */
+
+    // 自分のデッキだけをローカルに保持する。
+    // 相手のデッキは相手クライアントから同期されたカード情報を正とする。
+    if (role === "user1") {
+        gameState.player1.deck = deck;
+    } else if (role === "user2") {
+        gameState.player2.deck = deck;
+    }
+
+    if (role === "spectator") {
+
+        /*
+           観戦者の場合は、ここではデッキを操作しない
+        */
+
+    }
+
+    /* ---------------------------------------------------------
+       ★ 先にゲーム画面へ移動
+       
+       初期配置カード選択UIがゲーム画面内にある場合、
+       これを先に実行しないと選択画面が見えない。
+    --------------------------------------------------------- */
+
+    showGameScreen();
+
+    /* ---------------------------------------------------------
+       現在のプレイヤーのデッキを取得
+    --------------------------------------------------------- */
+
+    let player = null;
+
+    if (role === "user1") {
+        player = gameState.player1;
+    } else if (role === "user2") {
+        player = gameState.player2;
+    }
+
+    /* ---------------------------------------------------------
+       WebSocket接続（初期イベント送信より前）
+    --------------------------------------------------------- */
+    try {
+        await connectWebSocket();
+    } catch (error) {
+        console.warn("WebSocket接続に失敗しました。", error);
+    }
+
+    /* ---------------------------------------------------------
+       初期配置カードを1枚選択
+    --------------------------------------------------------- */
+
+    if (player) {
+
+        console.log(
+            "初期配置カードを選択します。デッキ枚数:",
+            player.deck.length
+        );
+
+        const initialCard = await selectInitialCard();
+
+        /* -----------------------------------------------------
+           初期配置カードを盤面へ
+        ----------------------------------------------------- */
+
+        if (initialCard) {
+
+            console.log(
+                "初期配置カード:",
+                initialCard
+            );
+   initialCard.x = 350;
+    initialCard.y = 600;
+
+            player.board.push(initialCard);
+
+            /*
+               全体盤面管理にも登録
+            */
+            gameState.boardCards.push(initialCard);
+
+            sendGameEvent("initial", {
+                cardId: initialCard.instanceId,
+                x: initialCard.x,
+                y: initialCard.y,
+                faceDown: !!initialCard.faceDown,
+                card: JSON.parse(JSON.stringify(initialCard))
+            });
+
+        } else {
+
+            console.warn(
+                "初期配置カードが選択されませんでした。"
+            );
+        }
+
+        /* -----------------------------------------------------
+           残りのデッキをシャッフル
+        ----------------------------------------------------- */
+
+        shuffle(player.deck);
+
+        console.log(
+            "シャッフル後のデッキ枚数:",
+            player.deck.length
+        );
+
+        /* -----------------------------------------------------
+           5枚ドロー
+        ----------------------------------------------------- */
+
+        const drawCount = Math.min(
+            5,
+            player.deck.length
+        );
+
+        for (let i = 0; i < drawCount; i++) {
+
+            const card = player.deck.pop();
+
+            if (!card) {
+                break;
+            }
+
+            player.hand.push(card);
+
+            /*
+               全体手札管理にも登録
+            */
+            gameState.handCards.push(card);
+
+            sendGameEvent("draw", {
+                cardId: card.instanceId,
+                faceDown: !!card.faceDown,
+                card: JSON.parse(JSON.stringify(card))
+            });
+        }
+
+        console.log(
+            "初期手札:",
+            player.hand
+        );
+
+        console.log(
+            "残りデッキ:",
+            player.deck.length
+        );
+    }
+
+    /* ---------------------------------------------------------
+       画面を再描画
+    --------------------------------------------------------- */
+
+    renderAll();
+
+    // 初期配置・初期手札・シャッフル後のデッキ順を相手へまとめて同期
+    sendStateSnapshot();
+
+    console.log("ゲーム開始処理完了");
+}
+
+/* =========================================================
+   My TCG Simulator
+   script.js
+========================================================= */
+// WebSocket 接続（Render の URLを後で入れる）
+let ws = null;
+
+function connectWebSocket() {
+    return new Promise((resolve) => {
+        let settled = false;
+
+        const finish = () => {
+            if (settled) return;
+            settled = true;
+            resolve();
+        };
+
+        try {
+            ws = new WebSocket("wss://ctcg-ws-server.onrender.com");
+        } catch (error) {
+            console.error("WebSocket生成エラー:", error);
+            finish();
+            return;
+        }
+
+        const timeoutId = setTimeout(() => {
+            if (!settled) {
+                console.warn("WebSocket接続がタイムアウトしました。ゲームはオフライン状態で開始します。");
+                finish();
+            }
+        }, 5000);
+
+        ws.onopen = () => {
+            clearTimeout(timeoutId);
+            addLog("オンライン対戦サーバーに接続しました。");
+            console.log("WebSocket OPEN");
+            sendGameEvent("stateRequest", {});
+            finish();
+        };
+
+        ws.onmessage = async (msg) => {
+            try {
+                let raw = msg.data;
+
+                if (raw instanceof Blob) {
+                    raw = await raw.text();
+                } else if (raw instanceof ArrayBuffer) {
+                    raw = new TextDecoder().decode(raw);
+                } else if (ArrayBuffer.isView(raw)) {
+                    raw = new TextDecoder().decode(raw);
+                }
+
+                if (typeof raw !== "string") raw = String(raw);
+
+                const event = JSON.parse(raw);
+                console.log("同期受信:", event);
+                applyGameEvent(event);
+            } catch (error) {
+                console.error("同期データの解析に失敗:", error, msg.data);
+            }
+        };
+
+        ws.onclose = () => {
+            clearTimeout(timeoutId);
+            addLog("サーバーとの接続が切れました。");
+        };
+
+        ws.onerror = (err) => {
+            clearTimeout(timeoutId);
+            console.error("WebSocket error:", err);
+            finish();
+        };
+    });
+}
+
+function sendGameEvent(type, payload = {}) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        console.warn("WebSocket が接続されていません");
+        return;
+    }
+
+    const event = {
+        type: type,
+        player: currentRole,
+        payload: payload
+    };
+
+    ws.send(JSON.stringify(event));
+}
+
+/* =========================================================
+   初期配置カード選択
+========================================================= */
+function selectInitialCard() {
+    return new Promise((resolve) => {
+        const overlay = document.getElementById("initial-card-overlay");
+        const cardList = document.getElementById("initial-card-list");
+        const selectedLabel = document.getElementById("initial-card-selected-label");
+        const confirmButton = document.getElementById("initial-card-confirm-button");
+
+        if (!overlay || !cardList || !selectedLabel || !confirmButton) {
+            console.warn("初期配置カード選択UIが見つかりません。");
+            resolve(null);
+            return;
+        }
+
+        cardList.innerHTML = "";
+        selectedLabel.textContent = "カードを選択してください";
+        confirmButton.disabled = true;
+
+        let selectedCard = null;
+
+        // ★ プレイヤーのデッキそのもの
+        const deck =
+            (currentRole === "user1")
+                ? gameState.player1.deck
+                : gameState.player2.deck;
+
+        // ★ デッキのカードをそのまま一覧にする
+        for (const card of deck) {
+
+            const item = document.createElement("div");
+            item.className = "initial-card-item";
+            item.dataset.instanceId = card.instanceId;
+
+            const image = document.createElement("img");
+            image.src = getCardImage(card);
+            image.alt = getCardLabel(card);
+            item.appendChild(image);
+
+            item.addEventListener("click", () => {
+                const previous = cardList.querySelector(".initial-card-item.selected");
+                if (previous) previous.classList.remove("selected");
+
+                item.classList.add("selected");
+                selectedCard = card;
+                selectedLabel.textContent = getCardLabel(card);
+                confirmButton.disabled = false;
+            });
+
+            cardList.appendChild(item);
+        }
+
+        confirmButton.onclick = () => {
+            if (!selectedCard) return;
+
+            const index = deck.findIndex(
+                c => c.instanceId === selectedCard.instanceId
+            );
+
+            if (index !== -1) {
+                deck.splice(index, 1); // ★ 正しく抜ける
+            }
+
+            overlay.style.display = "none";
+            resolve(selectedCard);
+        };
+
+        overlay.style.display = "flex";
+    });
+}
+
+
+
+/* =========================================================
+   シャッフル関数（グローバル）
+========================================================= */
+function shuffle(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+    }
+}
+
+
+/* =========================================================
+   JSONカードデータ読み込み
+========================================================= */
+async function loadCardDatabase() {
+    if (cardDatabaseLoaded) {
+        return true;
+    }
+    try {
+        const response =
+            await fetch(
+                "./data/cardsID.json"
+            );
+        if (!response.ok) {
+            throw new Error(
+                `カードデータの読み込みに失敗しました: HTTP ${response.status}`
+            );
+        }
+        const data =
+            await response.json();
+        if (!Array.isArray(data)) {
+            throw new Error(
+                "cardsID.jsonの形式が正しくありません。"
+            );
+        }
+
+        cardDatabase =
+            data;
+        cardDatabaseLoaded =
+            true;
+        console.log(
+            "カードデータを読み込みました:",
+            cardDatabase
+        );
+        return true;
+    } catch (error) {
+        console.error(
+            "カード読み込みエラー:",
+            error
+        );
+        alert(
+            "カードデータの読み込みに失敗しました。\n\n" +
+            error.message
+        );
+        return false;
     }
 }
 /* =========================================================
@@ -1391,6 +2142,9 @@ function renderBoard() {
                 );
             }
 
+            cardElement.style.left =
+                `${card.x}px`;
+
             const owner = getCardOwner(card);
             const isOpponent = owner && owner !== currentRole;
             const boardElement = document.getElementById("board");
@@ -1399,11 +2153,9 @@ function renderBoard() {
                 ? Math.max(0, boardElement.clientHeight - Number(card.y || 0) - cardHeight - 100)
                 : Number(card.y || 0);
 
-            cardElement.style.left =
-                `${Number(card.x || 0)}px`;
-
             cardElement.style.top =
                 `${displayY}px`;
+
             const localRotation = card.rotated ? 90 : 0;
             const facingRotation = isOpponent ? 180 : 0;
             cardElement.style.setProperty(
@@ -1473,39 +2225,34 @@ function renderBoard() {
 ========================== */
 
 let lastClickTime = 0;
-cardElement.addEventListener(
-    "click",
-    event => {
-        event.stopPropagation();
 
-        const now = Date.now();
-        if (now - lastClickTime < 350) {
-            lastClickTime = 0;
-            rotateCard(card.instanceId);
-            return;
-        }
-        lastClickTime = now;
+            cardElement.addEventListener("click", event => {
+                event.stopPropagation();
+                const now = Date.now();
 
-        setTimeout(() => {
-            if (lastClickTime === now) {
+                if (now - lastClickTime < 350) {
+                    lastClickTime = 0;
+                    rotateCard(card.instanceId);
+                    return;
+                }
+
+                lastClickTime = now;
+                setTimeout(() => {
+                    if (lastClickTime === now) {
+                        lastClickTime = 0;
+                        if (!card.faceDown) {
+                            selectCard(card.instanceId);
+                        }
+                    }
+                }, 360);
+            });
+
+            cardElement.addEventListener("dblclick", event => {
+                event.preventDefault();
+                event.stopPropagation();
                 lastClickTime = 0;
-                // 裏向きカードは選択・詳細表示しない
-                if (card.faceDown) return;
-                selectCard(card.instanceId);
-            }
-        }, 360);
-    }
-);
-
-cardElement.addEventListener(
-    "dblclick",
-    event => {
-        event.preventDefault();
-        event.stopPropagation();
-        rotateCard(card.instanceId);
-    }
-);
-
+                rotateCard(card.instanceId);
+            });
 
             /* =========================
                右クリック
@@ -2232,8 +2979,7 @@ function drawCard(faceDown = false) {
     // ★★★ オンライン同期（draw）★★★
     sendGameEvent("draw", {
         cardId: card.instanceId,
-        faceDown: !!card.faceDown,
-        card: JSON.parse(JSON.stringify(card))
+        faceDown: !!card.faceDown
     });
 
     // ログ
