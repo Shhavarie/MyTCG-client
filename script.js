@@ -2154,7 +2154,7 @@ function renderBoard() {
                 : sourceX;
 
             const displayY = isOpponent
-                ? boardHeight - sourceY - cardHeight + 50
+                ? boardHeight - sourceY - cardHeight + 25
                 : sourceY;
 
             cardElement.style.left = `${displayX}px`;
