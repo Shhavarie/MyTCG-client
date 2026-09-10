@@ -191,6 +191,7 @@ button {
    デッキエリア
 ========================================================= */
 .deck-zone {
+    position: relative;
     flex: 0 0 auto;
     padding: 12px;
     border-radius: 10px;
@@ -243,6 +244,36 @@ button {
     color: #aaaaaa;
 }
 
+
+
+/* =========================================================
+   デッキからサーチ
+========================================================= */
+.deck-search-button {
+    display: block;
+    position: absolute;
+    left: calc(50% + 80px);
+    top: 96px;
+    transform: translateY(-50%);
+    width: 112px;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 8px 10px;
+    cursor: pointer;
+    z-index: 20;
+    border: 1px solid #555555;
+    border-radius: 6px;
+    background: #303030;
+    color: #ffffff;
+    font-size: 14px;
+    line-height: 1.4;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.deck-search-button:hover {
+    background: #414141;
+}
 
 /* =========================================================
    デッキボタン
