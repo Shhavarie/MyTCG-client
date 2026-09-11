@@ -1099,6 +1099,19 @@ const COUNTER_TYPES = {
 };
 
 /* =========================================================
+   トークン召喚設定
+   ※ cardIds に盤面へ呼び出したいカードIDを登録してください。
+   複数IDを入れると、1回の召喚でまとめて盤面へ配置します。
+========================================================= */
+const TOKEN_SUMMON_GROUPS = [
+    {
+        name: "トークン一式",
+        cardIds: ["2001"]
+    }
+];
+
+
+/* =========================================================
    v7追加UIスタイル
 ========================================================= */
 function injectV7Styles() {
@@ -1709,6 +1722,10 @@ function setupGameButtons() {
         document.getElementById(
             "dice-button"
         );
+    const tokenSummonButton =
+        document.getElementById(
+            "token-summon-button"
+        );
     const undoButton =
         document.getElementById(
             "undo-button"
@@ -1737,6 +1754,14 @@ function setupGameButtons() {
             () => {
                 rollDice();
             }        );    }
+    if (tokenSummonButton) {
+        tokenSummonButton.addEventListener(
+            "click",
+            () => {
+                summonTokenGroup();
+            }
+        );
+    }
     if (undoButton) {
         undoButton.addEventListener(
             "click",
@@ -1776,6 +1801,9 @@ function showHomeScreen() {
     const deckBuilderScreen =
         document.getElementById("deck-builder-screen");
 
+    const infoScreen =
+        document.getElementById("info-screen");
+
 
     // すべての画面を非表示
     if (homeScreen) {
@@ -1788,6 +1816,10 @@ function showHomeScreen() {
 
     if (deckBuilderScreen) {
         deckBuilderScreen.classList.remove("active");
+    }
+
+    if (infoScreen) {
+        infoScreen.classList.remove("active");
     }
 
 
@@ -4329,6 +4361,75 @@ function renderPP() {
    ダイス
 ========================================================= */
 
+function summonTokenGroup() {
+    if (!currentRole || currentRole === "spectator") {
+        alert("トークン召喚はプレイヤーとして参加しているときに使用できます。");
+        return;
+    }
+
+    const me = currentRole === "user1" ? gameState.player1 : gameState.player2;
+    if (!me) return;
+
+    const groups = TOKEN_SUMMON_GROUPS.filter(group => Array.isArray(group.cardIds) && group.cardIds.length);
+    if (!groups.length) {
+        alert("トークン召喚対象が設定されていません。");
+        return;
+    }
+
+    let groupIndex = 0;
+    if (groups.length > 1) {
+        const choice = prompt(
+            "召喚するトークン群を選択してください。\n" +
+            groups.map((group, i) => `${i + 1}: ${group.name}`).join("\n"),
+            "1"
+        );
+        if (choice === null) return;
+        groupIndex = Math.max(0, Math.min(groups.length - 1, Number(choice) - 1));
+    }
+
+    const group = groups[groupIndex];
+    const startX = 100;
+    const startY = 100;
+    const gap = 20;
+
+    let summoned = 0;
+
+    group.cardIds.forEach((cardId, index) => {
+        const card = createCard(cardId);
+        if (!card) {
+            console.warn(`トークンカードID ${cardId} がカードDBに見つかりません`);
+            return;
+        }
+
+        card.faceDown = false;
+        card.rotated = false;
+        card.rotation = false;
+        card.x = startX + index * (90 + gap);
+        card.y = startY;
+
+        me.board.push(card);
+        summoned++;
+
+        sendGameEvent("initial", {
+            cardId: card.instanceId,
+            x: card.x,
+            y: card.y,
+            faceDown: false,
+            card: JSON.parse(JSON.stringify(card))
+        });
+    });
+
+    rebuildBoardCardsUnique();
+    sendStateSnapshot();
+    renderAll();
+
+    if (summoned > 0) {
+        addLog(`${group.name}を${summoned}枚召喚しました。`);
+    } else {
+        alert("召喚できるカードがありませんでした。カードID設定を確認してください。");
+    }
+}
+
 function rollDice() {
 
     // 2d6
@@ -4617,6 +4718,25 @@ function getRoleName(
 
 }
 
+function showInfoScreen() {
+    const homeScreen = document.getElementById("home-screen");
+    const gameScreen = document.getElementById("game-screen");
+    const deckBuilderScreen = document.getElementById("deck-builder-screen");
+    const infoScreen = document.getElementById("info-screen");
+
+    homeScreen?.classList.remove("active");
+    gameScreen?.classList.remove("active");
+    deckBuilderScreen?.classList.remove("active");
+    infoScreen?.classList.add("active");
+}
+
+function setupInfoScreen() {
+    const backButton = document.getElementById("back-to-home-from-info-button");
+    if (backButton) {
+        backButton.addEventListener("click", () => showHomeScreen());
+    }
+}
+
 function setupHomeButtons() {
 
     const user1Button =
@@ -4767,21 +4887,7 @@ function setupHomeButtons() {
 
     if (startWithDeckButton) {
         startWithDeckButton.addEventListener("click", () => {
-            const deckCode =
-                getCurrentDeckCode();
-            if (!deckCode) {
-                alert(
-                    "デッキコードを入力してください。"
-                );
-                return;
-            }
-
-            // 入力欄のコードを保存
-            gameState.deckCode =
-                deckCode;
-
-            // ユーザー1として開始
-            startGame("user1");
+            showInfoScreen();
         });
     }
 
@@ -5045,6 +5151,7 @@ function initializeGameEvents() {
 ========================================================= */
 
 initializeGameEvents();
+setupInfoScreen();
 
 
 /* =========================================================
