@@ -32,11 +32,11 @@
     "id": "1004",
     "image":"./img/cards/1adventure/1004.png",
     "type": "adventurer",
-    "hp": 12,
-    "attack": 5,
-    "defense": 3,
+    "hp": 6,
+    "attack": 2,
+    "defense": 2,
     "magic": 0,
-    "resistance": 1
+    "resistance": 0
   }, {
     "id": "1005",
     "image":"./img/cards/1adventure/1005.png",
