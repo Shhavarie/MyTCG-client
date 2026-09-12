@@ -1106,7 +1106,7 @@ const COUNTER_TYPES = {
 const TOKEN_SUMMON_GROUPS = [
     {
         name: "トークン一式",
-        cardIds: ["6001"]
+        cardIds: ["2001"]
     }
 ];
 
