@@ -162,12 +162,12 @@
 
   {
     "id": "6001",
-    "image": "./img/cards/6item/6002.png",
+    "image": "./img/cards/6item/6001.png",
     "type": "event"
   },
   {
     "id": "6002",
-    "image": "./img/cards/6item/6001.png",
+    "image": "./img/cards/6item/6002.png",
     "type": "event"
   },
   {
