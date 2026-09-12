@@ -100,6 +100,27 @@ function applyHandFlip(player, payload) {
     gameState.handCards.push(card);
 }
 
+
+function applyRemoteLog(player, payload) {
+    if (!payload?.message) return;
+    addLog(payload.message, false, payload.id);
+}
+
+function applyDice(player, payload) {
+    const die1 = Number(payload?.die1);
+    const die2 = Number(payload?.die2);
+    const result = Number(payload?.result);
+    if (![die1, die2, result].every(Number.isFinite)) return;
+
+    const resultElement = document.getElementById("dice-result");
+    const numberElement = resultElement?.querySelector(".dice-result-number");
+    if (numberElement) numberElement.textContent = result;
+    resultElement?.classList.remove("hidden");
+    setTimeout(() => resultElement?.classList.add("hidden"), 1200);
+
+    addLog(`${getRoleName(player)}が2D6を振って${die1}+${die2}＝${result}をだしました`, false);
+}
+
 /* =========================================================
   同期回転
 ========================================================= */
@@ -203,7 +224,9 @@ function createGameSnapshot() {
         boardCards: gameState.boardCards,
         handCards: gameState.handCards,
         pp: gameState.pp,
-        deckCode: gameState.deckCode
+        deckCode: gameState.deckCode,
+        logs: gameState.logs,
+        logEventIds: gameState.logEventIds
     };
 }
 
@@ -235,6 +258,13 @@ function applyStateSnapshot(snapshot, senderPlayer) {
 
     if (clone.pp) {
         gameState.pp = clone.pp;
+    }
+
+    // 接続前のログも共有する
+    if (Array.isArray(clone.logs)) {
+        const existing = new Set(gameState.logs || []);
+        gameState.logs = [...(gameState.logs || []), ...clone.logs.filter(log => !existing.has(log))].slice(-500);
+        renderLogs();
     }
 
     // 相手のデッキコードで自分のデッキ設定を上書きしない。
@@ -273,6 +303,8 @@ function applyGameEvent(event) {
             applyStateSnapshot(payload, player);
             return;
         case "draw": applyDraw(player, payload); break;
+        case "log": applyRemoteLog(player, payload); break;
+        case "dice": applyDice(player, payload); break;
         case "search": applySearch(player, payload); break;
         case "play": applyPlay(player, payload); break;
         case "move": applyMove(player, payload); break;
@@ -390,6 +422,8 @@ function applyDraw(player, payload) {
 
     gameState.handCards = gameState.handCards.filter(c => c.instanceId !== payload.cardId);
     gameState.handCards.push(card);
+
+    addLog(`${getRoleName(player)}がカードをドローしました`, false);
 }
 
 /* =========================================================
@@ -1068,7 +1102,8 @@ let gameState = {
     handCards: [],
     pp: Array(20).fill(false),
     history: [],
-    logs: []
+    logs: [],
+    logEventIds: []
 };
 let contextTargetCardId = null;
 
@@ -1106,7 +1141,7 @@ const COUNTER_TYPES = {
 const TOKEN_SUMMON_GROUPS = [
     {
         name: "トークン一式",
-        cardIds: ["2001"]
+        cardIds: ["6001"]
     }
 ];
 
@@ -1435,6 +1470,8 @@ async function startGame(role) {
                 faceDown: !!card.faceDown,
                 card: JSON.parse(JSON.stringify(card))
             });
+
+            addLog(`${getRoleName(currentRole)}がカードをドローしました`);
         }
 
         console.log(
@@ -3202,12 +3239,8 @@ function drawCard(faceDown = false) {
         faceDown: !!card.faceDown
     });
 
-    // ログ
-    addLog(
-        faceDown
-            ? "カードを裏向きで引きました。"
-            : `${getCardLabel(card)}を引きました。`
-    );
+    // ログ（カードID・カード名は表示しない）
+    addLog(`${getRoleName(currentRole)}がカードをドローしました`);
 
     // 手札を更新
     renderHand();
@@ -4512,8 +4545,10 @@ function rollDice() {
     );
 
 
+    sendGameEvent("dice", { die1, die2, result });
+
     addLog(
-        `2D6を振って ${die1} + ${die2} = ${result} が出ました。`
+        `${getRoleName(currentRole)}が2D6を振って${die1}+${die2}＝${result}をだしました`
     );
 
 
@@ -4535,32 +4570,26 @@ function rollDice() {
    ログ
 ========================================================= */
 
-function addLog(
-    message
-) {
+function addLog(message, sync = true, eventId = null) {
+    if (!message) return;
 
-    const now =
-        new Date();
+    gameState.logEventIds = Array.isArray(gameState.logEventIds) ? gameState.logEventIds : [];
+    const id = eventId || `${currentRole || "local"}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    if (gameState.logEventIds.includes(id)) return;
 
+    const now = new Date();
+    const time = now.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
-    const time =
-        now.toLocaleTimeString(
-            "ja-JP",
-            {
-                hour: "2-digit",
-                minute: "2-digit",
-                second: "2-digit"
-            }
-        );
-
-
-    gameState.logs.push(
-        `[${time}] ${message}`
-    );
-
+    gameState.logEventIds.push(id);
+    gameState.logs.push(`[${time}] ${message}`);
+    gameState.logs = gameState.logs.slice(-500);
+    if (gameState.logEventIds.length > 500) gameState.logEventIds = gameState.logEventIds.slice(-500);
 
     renderLogs();
 
+    if (sync) {
+        sendGameEvent("log", { id, message, time });
+    }
 }
 
 
@@ -4721,14 +4750,13 @@ function handleDocumentClick(
     }
 
 
-    const board =
-        document.getElementById(
-            "board"
-        );
+    const board = document.getElementById("board");
+    const boardCards = document.getElementById("board-cards");
 
+    // 盤面の何もない場所をクリックしたらカード詳細を閉じる。
     if (
-        board &&
-        event.target === board
+        (event.target === board || event.target === boardCards) &&
+        !event.target.closest?.(".board-card")
     ) {
         clearCardSelection();
     }
