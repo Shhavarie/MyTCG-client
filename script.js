@@ -203,15 +203,6 @@ function applyInitial(player, payload) {
 }/* =========================================================
    同期PP
 ========================================================= */
-function applyPPChange(player, payload) {
-    const { index, value } = payload;
-
-    // PP配列を更新
-    gameState.pp[index] = value;
-
-    // PP再描画
-    renderPP();
-}
 
 /* =========================================================
    ゲーム状態スナップショット同期
@@ -223,7 +214,6 @@ function createGameSnapshot() {
         player2: gameState.player2,
         boardCards: gameState.boardCards,
         handCards: gameState.handCards,
-        pp: gameState.pp,
         deckCode: gameState.deckCode,
         logs: gameState.logs,
         logEventIds: gameState.logEventIds
@@ -255,10 +245,6 @@ function applyStateSnapshot(snapshot, senderPlayer) {
         hand: uniqueByInstanceId(remote.hand),
         board: uniqueByInstanceId(remote.board)
     };
-
-    if (clone.pp) {
-        gameState.pp = clone.pp;
-    }
 
     // 接続前のログも共有する
     if (Array.isArray(clone.logs)) {
@@ -313,7 +299,6 @@ function applyGameEvent(event) {
         case "rotate": applyRotate(player, payload); break;
         case "counter": applyCounter(player, payload); break;
         case "initial": applyInitial(player, payload); break;
-        case "ppChange": applyPPChange(player, payload); break;
 
         // 任意イベント
         case "select": applySelect(player, payload); break;
@@ -747,15 +732,6 @@ function applyInitial(player, payload) {
 }/* =========================================================
    同期PP
 ========================================================= */
-function applyPPChange(player, payload) {
-    const { index, value } = payload;
-
-    // PP配列を更新
-    gameState.pp[index] = value;
-
-    // PP再描画
-    renderPP();
-}
 
 /* =========================================================
    ゲーム状態スナップショット同期
@@ -767,7 +743,6 @@ function createGameSnapshot() {
         player2: gameState.player2,
         boardCards: gameState.boardCards,
         handCards: gameState.handCards,
-        pp: gameState.pp,
         deckCode: gameState.deckCode,
         logs: gameState.logs,
         logEventIds: gameState.logEventIds
@@ -786,10 +761,6 @@ function applyStateSnapshot(snapshot, senderPlayer) {
         hand: remote.hand || [],
         board: remote.board || []
     };
-
-    if (clone.pp) {
-        gameState.pp = clone.pp;
-    }
 
     /* 1P/2P共通ログをマージ */
     if (Array.isArray(clone.logs)) {
@@ -856,7 +827,6 @@ function applyGameEvent(event) {
         case "rotate": applyRotate(player, payload); break;
         case "counter": applyCounter(player, payload); break;
         case "initial": applyInitial(player, payload); break;
-        case "ppChange": applyPPChange(player, payload); break;
 
         // 任意イベント
         case "select": applySelect(player, payload); break;
@@ -1096,13 +1066,6 @@ function applyInitial(player, payload) {
 /* =========================================================
    同期PP
 ========================================================= */
-function applyPPChange(player, payload) {
-    const { index, value } = payload;
-
-    gameState.pp[index] = value;
-
-    renderPP();
-}
 
 
 
@@ -1120,7 +1083,7 @@ let gameState = {
     nextCardId: 1,
     boardCards: [],
     handCards: [],
-    pp: Array(20).fill(false),
+    pp: Array(20).fill(0),
     history: [],
     logs: [],
     logEventIds: []
@@ -1282,7 +1245,7 @@ async function startGame(role) {
         boardCards: [],
         handCards: [],
 
-        pp: Array(20).fill(false),
+        pp: Array(20).fill(0),
 
         history: [],
         logs: [],
@@ -4296,7 +4259,32 @@ function stackCard(instanceId) {
 /* =========================================================
    PP
 ========================================================= */
+function injectPPThreeColorStyles() {
+    if (document.getElementById("pp-three-color-styles")) return;
+    const style = document.createElement("style");
+    style.id = "pp-three-color-styles";
+    style.textContent = `
+        .pp-slot.pp-color-blue {
+            background: #2f6fed !important;
+            border-color: #6f9cff !important;
+            box-shadow: 0 0 8px rgba(47,111,237,.75);
+        }
+        .pp-slot.pp-color-green {
+            background: #32a852 !important;
+            border-color: #75d98a !important;
+            box-shadow: 0 0 8px rgba(50,168,82,.75);
+        }
+        .pp-slot.pp-color-red {
+            background: #e34b4b !important;
+            border-color: #ff8585 !important;
+            box-shadow: 0 0 8px rgba(227,75,75,.75);
+        }
+    `;
+    document.head.appendChild(style);
+}
+
 function setupPP() {
+    injectPPThreeColorStyles();
     const ppZone =
         document.getElementById(
             "pp-zone"
@@ -4336,23 +4324,22 @@ function setupPP() {
    PP切り替え
 ========================================================= */
 function togglePP(index) {
+    if (!Number.isInteger(index) || index < 0 || index >= gameState.pp.length) {
+        return;
+    }
 
     saveHistory();
 
-    const nextState = !gameState.pp[index];
+    // PPは各プレイヤー個別管理。オンライン同期しない。
+    // 3色を順番に切り替える: 0=青 / 1=緑 / 2=赤
+    const currentState = Number(gameState.pp[index] || 0);
+    const nextState = (currentState + 1) % 3;
 
     for (let i = 0; i <= index; i++) {
         gameState.pp[i] = nextState;
     }
 
-    // ★★★ オンライン同期 ★★★
-    sendGameEvent("ppChange", {
-        index: index,
-        value: nextState
-    });
-
-    addLog(`マナコスト ${index + 1} までを ${nextState ? "ON" : "OFF"} にしました。`);
-
+    addLog(`PP ${index + 1} までを${nextState === 0 ? "青" : nextState === 1 ? "緑" : "赤"}にしました。`, false);
     renderPP();
 }
 
@@ -4362,47 +4349,25 @@ function togglePP(index) {
 ========================================================= */
 
 function renderPP() {
+    const ppZone = document.getElementById("pp-zone");
+    if (!ppZone) return;
 
-    const ppZone =
-        document.getElementById(
-            "pp-zone"
-        );
+    const slots = ppZone.querySelectorAll(".pp-slot");
 
-
-    if (!ppZone) {
-        return;
-    }
-
-
-    const slots =
-        ppZone.querySelectorAll(
-            ".pp-slot"
-        );
-
-
-    slots.forEach(
-        (slot, index) => {
-
-            if (
-                gameState.pp[index]
-            ) {
-
-                slot.classList.add(
-                    "active"
-                );
-
-            } else {
-
-                slot.classList.remove(
-                    "active"
-                );
-
-            }
-
+    slots.forEach((slot, index) => {
+        const state = Number(gameState.pp[index] || 0);
+        slot.classList.remove("pp-color-blue", "pp-color-green", "pp-color-red");
+        if (state === 0) {
+            slot.classList.add("pp-color-blue");
+        } else if (state === 1) {
+            slot.classList.add("pp-color-green");
+        } else {
+            slot.classList.add("pp-color-red");
         }
-    );
-
+        slot.dataset.ppState = String(state);
+    });
 }
+
 
 
 /* =========================================================
