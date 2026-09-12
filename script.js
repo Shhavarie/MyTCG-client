@@ -4265,17 +4265,17 @@ function injectPPThreeColorStyles() {
     style.id = "pp-three-color-styles";
     style.textContent = `
         .pp-slot.pp-color-blue {
-            background: #2f6fed !important;
+            background: #222222 !important;
             border-color: #6f9cff !important;
             box-shadow: 0 0 8px rgba(47,111,237,.75);
         }
         .pp-slot.pp-color-green {
-            background: #32a852 !important;
+            background: #f2c94c !important;
             border-color: #75d98a !important;
             box-shadow: 0 0 8px rgba(50,168,82,.75);
         }
         .pp-slot.pp-color-red {
-            background: #e34b4b !important;
+            background: #32a852 !important;
             border-color: #ff8585 !important;
             box-shadow: 0 0 8px rgba(227,75,75,.75);
         }
@@ -4331,7 +4331,7 @@ function togglePP(index) {
     saveHistory();
 
     // PPは各プレイヤー個別管理。オンライン同期しない。
-    // 3色を順番に切り替える: 0=青 / 1=緑 / 2=赤
+    // 3色を順番に切り替える: 0=黒 / 1=黄色 / 2=緑
     const currentState = Number(gameState.pp[index] || 0);
     const nextState = (currentState + 1) % 3;
 
@@ -4339,7 +4339,7 @@ function togglePP(index) {
         gameState.pp[i] = nextState;
     }
 
-    addLog(`PP ${index + 1} までを${nextState === 0 ? "青" : nextState === 1 ? "緑" : "赤"}にしました。`, false);
+    addLog(`PP ${index + 1} までを${nextState === 0 ? "黒" : nextState === 1 ? "黄色" : "緑"}にしました。`, false);
     renderPP();
 }
 
