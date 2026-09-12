@@ -768,7 +768,9 @@ function createGameSnapshot() {
         boardCards: gameState.boardCards,
         handCards: gameState.handCards,
         pp: gameState.pp,
-        deckCode: gameState.deckCode
+        deckCode: gameState.deckCode,
+        logs: gameState.logs,
+        logEventIds: gameState.logEventIds
     };
 }
 
@@ -777,11 +779,8 @@ function applyStateSnapshot(snapshot, senderPlayer) {
 
     const clone = JSON.parse(JSON.stringify(snapshot));
     const remote = clone[senderPlayer];
-
     if (!remote) return;
 
-    // スナップショットを送ってきたプレイヤーの状態だけを更新する。
-    // 自分の状態まで上書きしないことで、同時にゲーム開始した場合の競合を防ぐ。
     gameState[senderPlayer] = {
         deck: remote.deck || [],
         hand: remote.hand || [],
@@ -792,10 +791,30 @@ function applyStateSnapshot(snapshot, senderPlayer) {
         gameState.pp = clone.pp;
     }
 
-    // 相手のデッキコードで自分のデッキ設定を上書きしない。
-    // 各プレイヤーのデッキはそれぞれのクライアントが管理する。
+    /* 1P/2P共通ログをマージ */
+    if (Array.isArray(clone.logs)) {
+        gameState.logs = Array.isArray(gameState.logs) ? gameState.logs : [];
+        const merged = new Set(gameState.logs);
+        clone.logs.forEach(log => {
+            if (!merged.has(log)) {
+                gameState.logs.push(log);
+                merged.add(log);
+            }
+        });
+        gameState.logs = gameState.logs.slice(-500);
+    }
+    if (Array.isArray(clone.logEventIds)) {
+        gameState.logEventIds = Array.isArray(gameState.logEventIds) ? gameState.logEventIds : [];
+        const mergedIds = new Set(gameState.logEventIds);
+        clone.logEventIds.forEach(id => {
+            if (!mergedIds.has(id)) {
+                gameState.logEventIds.push(id);
+                mergedIds.add(id);
+            }
+        });
+        gameState.logEventIds = gameState.logEventIds.slice(-500);
+    }
 
-    // 各プレイヤーの盤面・手札から全体配列を再構築
     gameState.boardCards = [
         ...(gameState.player1.board || []),
         ...(gameState.player2.board || [])
@@ -807,6 +826,7 @@ function applyStateSnapshot(snapshot, senderPlayer) {
     ];
 
     renderAll();
+    renderLogs();
     console.log("ゲーム状態を同期しました:", senderPlayer);
 }
 
@@ -1135,8 +1155,8 @@ const COUNTER_TYPES = {
 
 /* =========================================================
    トークン召喚設定
-   ※ cardIds に盤面へ呼び出したいカードIDを登録してください。
-   複数IDを入れると、1回の召喚でまとめて盤面へ配置します。
+   ※ cardIds に召喚候補となるカードIDを登録してください。
+   トークン召喚時に画像を見て候補から1枚選択し、盤面へ配置します。
 ========================================================= */
 const TOKEN_SUMMON_GROUPS = [
     {
@@ -4386,9 +4406,9 @@ function renderPP() {
 
 
 /* =========================================================
-   ダイス
+   トークン召喚
+   指定カード群から画像を見て1枚選択して盤面へ配置
 ========================================================= */
-
 function summonTokenGroup() {
     if (!currentRole || currentRole === "spectator") {
         alert("トークン召喚はプレイヤーとして参加しているときに使用できます。");
@@ -4414,7 +4434,11 @@ function summonTokenGroup() {
             "1"
         );
         if (choice === null) return;
-        groupIndex = Math.max(0, Math.min(groups.length - 1, Number(choice) - 1));
+        groupIndex = Number(choice) - 1;
+        if (!Number.isInteger(groupIndex) || groupIndex < 0 || groupIndex >= groups.length) {
+            alert("無効な選択です。");
+            return;
+        }
     }
 
     const group = groups[groupIndex];
@@ -4427,27 +4451,142 @@ function summonTokenGroup() {
         return;
     }
 
-    /* 指定カード群から1枚だけ選択 */
-    const choice = prompt(
-        "召喚するカードを選択してください。\n" +
-        candidates.map((card, i) => `${i + 1}: ${card.cardId}`).join("\n"),
-        "1"
-    );
-    if (choice === null) return;
+    /* ---------------------------------------------
+       山札サーチ風のカード選択画面
+       カード画像をクリックして1枚選択
+    --------------------------------------------- */
+    const existing = document.getElementById("token-search-overlay");
+    if (existing) existing.remove();
 
-    const index = Number(choice) - 1;
-    if (!Number.isInteger(index) || index < 0 || index >= candidates.length) {
-        alert("無効な選択です。");
-        return;
-    }
+    const overlay = document.createElement("div");
+    overlay.id = "token-search-overlay";
+    overlay.style.cssText = `
+        position: fixed;
+        inset: 0;
+        z-index: 10000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0,0,0,.72);
+        padding: 24px;
+        box-sizing: border-box;
+    `;
 
-    const card = candidates[index];
+    const panel = document.createElement("div");
+    panel.style.cssText = `
+        width: min(760px, 94vw);
+        max-height: 88vh;
+        overflow: auto;
+        box-sizing: border-box;
+        padding: 22px;
+        border: 1px solid #555;
+        border-radius: 10px;
+        background: #202020;
+        color: #fff;
+        box-shadow: 0 12px 40px rgba(0,0,0,.55);
+    `;
+
+    const title = document.createElement("h2");
+    title.textContent = "トークン召喚";
+    title.style.cssText = "margin:0 0 6px;text-align:center;font-size:20px;";
+
+    const note = document.createElement("p");
+    note.textContent = "召喚するカードを選択してください";
+    note.style.cssText = "margin:0 0 18px;text-align:center;color:#ccc;font-size:14px;";
+
+    const cardGrid = document.createElement("div");
+    cardGrid.style.cssText = `
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 16px;
+        justify-items: center;
+    `;
+
+    const closeButton = document.createElement("button");
+    closeButton.type = "button";
+    closeButton.textContent = "キャンセル";
+    closeButton.style.cssText = `
+        display:block;
+        margin:20px auto 0;
+        padding:8px 24px;
+        border:1px solid #555;
+        border-radius:6px;
+        background:#303030;
+        color:#fff;
+        cursor:pointer;
+    `;
+    closeButton.addEventListener("click", () => overlay.remove());
+
+    candidates.forEach(card => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.title = `${card.cardId}を召喚`;
+        button.style.cssText = `
+            width: 130px;
+            padding: 8px;
+            border: 1px solid #555;
+            border-radius: 8px;
+            background: #2b2b2b;
+            color: #fff;
+            cursor: pointer;
+            transition: transform .12s, border-color .12s;
+        `;
+
+        const img = document.createElement("img");
+        img.src = getCardImage(card);
+        img.alt = `カード${card.cardId}`;
+        img.style.cssText = `
+            display:block;
+            width:100%;
+            height:auto;
+            max-height:190px;
+            object-fit:contain;
+            border-radius:4px;
+            background:#111;
+        `;
+
+        const label = document.createElement("div");
+        label.textContent = card.cardId;
+        label.style.cssText = "margin-top:7px;font-size:14px;font-weight:bold;";
+
+        button.appendChild(img);
+        button.appendChild(label);
+        button.addEventListener("mouseenter", () => {
+            button.style.transform = "scale(1.04)";
+            button.style.borderColor = "#aaa";
+        });
+        button.addEventListener("mouseleave", () => {
+            button.style.transform = "scale(1)";
+            button.style.borderColor = "#555";
+        });
+        button.addEventListener("click", () => {
+            overlay.remove();
+            placeSummonedToken(card, group, me);
+        });
+
+        cardGrid.appendChild(button);
+    });
+
+    panel.appendChild(title);
+    panel.appendChild(note);
+    panel.appendChild(cardGrid);
+    panel.appendChild(closeButton);
+    overlay.appendChild(panel);
+    overlay.addEventListener("click", event => {
+        if (event.target === overlay) overlay.remove();
+    });
+    document.body.appendChild(overlay);
+}
+
+function placeSummonedToken(card, group, me) {
+    /* 初期配置カードと同じ座標 */
     card.faceDown = false;
     card.rotated = false;
     card.rotation = false;
     card.x = 350;
-    card.y = 100;
+    card.y = 600;
 
+    me.board = Array.isArray(me.board) ? me.board : [];
     me.board.push(card);
     rebuildBoardCardsUnique();
 
@@ -4461,7 +4600,7 @@ function summonTokenGroup() {
 
     sendStateSnapshot();
     renderAll();
-    addLog(`${group.name}からカード${card.cardId}を1枚召喚しました。`);
+    addLog(`${getRoleName(currentRole)}がトークンを召喚しました`);
 }
 
 function rollDice() {
@@ -4546,6 +4685,9 @@ function addLog(message, sync = true, eventId = null) {
 
     if (sync) {
         sendGameEvent("log", { id, message, time });
+        // ログ単体イベントに加えて最新スナップショットにも含める。
+        // これにより途中参加の相手・観戦者にも1P/2P双方のログを引き継げる。
+        sendStateSnapshot();
     }
 }
 
