@@ -1547,3 +1547,13 @@ button {
     }
 
 }
+
+/* v20 観戦者：1P/2Pの手札を同時表示 */
+.spectator-hand-note { display:none; margin:0 0 8px; font-size:12px; opacity:.8; }
+.spectator-hand-section { margin-bottom:14px; padding:8px; border:1px solid #444; border-radius:6px; background:rgba(0,0,0,.18); }
+.spectator-hand-title { font-weight:700; margin-bottom:6px; }
+.spectator-hand-cards { display:flex; flex-wrap:wrap; gap:6px; min-height:30px; }
+.spectator-hand-card { flex:0 0 auto; cursor:default; }
+.spectator-hand-card img { display:block; }
+.spectator-hand-empty { font-size:12px; opacity:.65; padding:6px 0; }
+body.spectator-mode .spectator-hand-note { display:block; }
