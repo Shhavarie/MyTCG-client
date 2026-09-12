@@ -1106,7 +1106,7 @@ const COUNTER_TYPES = {
 const TOKEN_SUMMON_GROUPS = [
     {
         name: "トークン一式",
-        cardIds: ["2001"]
+        cardIds: ["6001"]
     }
 ];
 
@@ -1196,12 +1196,13 @@ async function startGame(role) {
 
     console.log("デッキコード:", deckCode);
 
-    if (!deckCode) {
+    if (role !== "spectator" && !deckCode) {
         alert("デッキコードが入力されていません。");
         return;
     }
 
     currentRole = role;
+    document.body.classList.toggle("spectator-mode", role === "spectator");
 
     /* ---------------------------------------------------------
        ゲーム状態を初期化
@@ -1231,7 +1232,7 @@ async function startGame(role) {
         history: [],
         logs: [],
 
-        deckCode: deckCode
+        deckCode: role === "spectator" ? "" : deckCode
     };
 
     /*
@@ -1244,36 +1245,27 @@ async function startGame(role) {
        デッキ構築
     --------------------------------------------------------- */
 
-    const deck = buildDeckFromCode(deckCode);
+    let deck = [];
+    if (role !== "spectator") {
+        deck = buildDeckFromCode(deckCode);
 
-    console.log("生成されたデッキ枚数:", deck.length);
+        console.log("生成されたデッキ枚数:", deck.length);
 
-    if (deck.length === 0) {
-        alert(
-            "デッキを作成できませんでした。\n" +
-            "デッキコードまたはカードIDを確認してください。"
-        );
-        return;
-    }
+        if (deck.length === 0) {
+            alert(
+                "デッキを作成できませんでした。\n" +
+                "デッキコードまたはカードIDを確認してください。"
+            );
+            return;
+        }
 
-    /* ---------------------------------------------------------
-       プレイヤーへデッキをセット
-    --------------------------------------------------------- */
-
-    // 自分のデッキだけをローカルに保持する。
-    // 相手のデッキは相手クライアントから同期されたカード情報を正とする。
-    if (role === "user1") {
-        gameState.player1.deck = deck;
-    } else if (role === "user2") {
-        gameState.player2.deck = deck;
-    }
-
-    if (role === "spectator") {
-
-        /*
-           観戦者の場合は、ここではデッキを操作しない
-        */
-
+        if (role === "user1") {
+            gameState.player1.deck = deck;
+        } else if (role === "user2") {
+            gameState.player2.deck = deck;
+        }
+    } else {
+        console.log("観戦モード: デッキコードなしで1P/2Pの状態を待機します。");
     }
 
     /* ---------------------------------------------------------
@@ -1505,6 +1497,11 @@ function connectWebSocket() {
             addLog("オンライン対戦サーバーに接続しました。");
             console.log("WebSocket OPEN");
             sendGameEvent("stateRequest", {});
+            if (currentRole === "spectator") {
+                setTimeout(() => sendGameEvent("stateRequest", {}), 1000);
+                setTimeout(() => sendGameEvent("stateRequest", {}), 3000);
+                setTimeout(() => sendGameEvent("stateRequest", {}), 6000);
+            }
             finish();
         };
 
@@ -1792,6 +1789,8 @@ function setupGameButtons() {
 ========================================================= */
 function showHomeScreen() {
 
+    document.body.classList.remove("spectator-mode");
+
     const homeScreen =
         document.getElementById("home-screen");
 
@@ -1867,24 +1866,21 @@ function renderHand() {
     // 現在のプレイヤーの手札を選ぶ
     // =====================================================
 
-    let handCards = [];
-
-    if (currentRole === "user1") {
-
-        handCards =
-            gameState.player1.hand;
-
-    } else if (currentRole === "user2") {
-
-        handCards =
-            gameState.player2.hand;
-
-    } else {
-
-        // 観戦者は手札を持たない
+    // プレイヤーは自分の手札のみ。観戦者は1P/2Pの手札を両方表示する。
+    if (currentRole === "spectator") {
+        renderSpectatorHands();
         return;
     }
 
+    let handCards = [];
+
+    if (currentRole === "user1") {
+        handCards = gameState.player1.hand || [];
+    } else if (currentRole === "user2") {
+        handCards = gameState.player2.hand || [];
+    } else {
+        return;
+    }
 
     // =====================================================
     // 手札を描画
@@ -2024,6 +2020,49 @@ function renderHand() {
     renderPP();
     renderSelectedCardDetail();
     renderLogs();
+}
+
+/* =========================================================
+   観戦者用：1P/2Pの手札を両方表示
+========================================================= */
+function renderSpectatorHands() {
+    const handElement = document.getElementById("hand");
+    if (!handElement) return;
+    handElement.innerHTML = "";
+
+    const renderPlayerHand = (playerKey, label) => {
+        const player = gameState[playerKey] || { hand: [] };
+        const section = document.createElement("div");
+        section.className = "spectator-hand-section";
+
+        const title = document.createElement("div");
+        title.className = "spectator-hand-title";
+        title.textContent = label;
+        section.appendChild(title);
+
+        const cards = document.createElement("div");
+        cards.className = "spectator-hand-cards";
+        (player.hand || []).forEach(card => {
+            const cardElement = document.createElement("div");
+            cardElement.className = "hand-card spectator-hand-card";
+            const image = document.createElement("img");
+            image.src = getCardImage(card);
+            image.alt = getCardLabel(card);
+            cardElement.appendChild(image);
+            cards.appendChild(cardElement);
+        });
+        if (!(player.hand || []).length) {
+            const empty = document.createElement("div");
+            empty.className = "spectator-hand-empty";
+            empty.textContent = "手札なし";
+            cards.appendChild(empty);
+        }
+        section.appendChild(cards);
+        handElement.appendChild(section);
+    };
+
+    renderPlayerHand("player1", "1P 手札");
+    renderPlayerHand("player2", "2P 手札");
 }
 
 /* =========================================================
@@ -2283,7 +2322,12 @@ function renderBoard() {
             }
 
             const owner = getCardOwner(card);
-            const isOpponent = owner && owner !== currentRole;
+            // 観戦者は1P側を正位置、2P側を対面位置として表示する。
+            const isOpponent = currentRole === "user1"
+                ? owner === "user2"
+                : currentRole === "user2"
+                    ? owner === "user1"
+                    : owner === "user2";
             const boardElement = document.getElementById("board");
 
             // 相手カードは「ボード中央」を軸に180度の鏡写しにする。
