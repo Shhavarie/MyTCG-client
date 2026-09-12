@@ -1140,8 +1140,8 @@ const COUNTER_TYPES = {
 ========================================================= */
 const TOKEN_SUMMON_GROUPS = [
     {
-        name: "トークン一式",
-        cardIds: ["6001"]
+        name: "トークン",
+        cardIds: ["6001", "2001"]
     }
 ];
 
@@ -1380,55 +1380,6 @@ async function startGame(role) {
                 "初期配置カードが選択されませんでした。"
             );
         }
-
-        /* -----------------------------------------------------
-           ★ ゲーム開始時に 6001 を自動で1枚盤面へ配置
-           デッキには入れず、各プレイヤーの盤面に1枚だけ作成する。
-        ----------------------------------------------------- */
-        const startCard6001 = {
-            instanceId: (() => {
-                const uuid = (typeof crypto !== "undefined" && crypto.randomUUID)
-                    ? crypto.randomUUID()
-                    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-                return `card-${currentRole || "local"}-start-6001-${uuid}`;
-            })(),
-            owner: currentRole || "unknown",
-            cardId: "6001",
-            image: "./img/cards/6item/6001.png",
-            type: "normal",
-            baseStats: {
-                hp: 0,
-                attack: 0,
-                defense: 0,
-                magic: 0,
-                resistance: 0
-            },
-            counters: {
-                green: 0,
-                red: 0,
-                white: 0,
-                blue: 0,
-                yellow: 0
-            },
-            faceDown: false,
-            rotated: false,
-            rotation: false,
-            x: 350,
-            y: 600
-        };
-
-        player.board.push(startCard6001);
-        rebuildBoardCardsUnique();
-
-        sendGameEvent("initial", {
-            cardId: startCard6001.instanceId,
-            x: startCard6001.x,
-            y: startCard6001.y,
-            faceDown: false,
-            card: JSON.parse(JSON.stringify(startCard6001))
-        });
-
-        addLog("ゲーム開始時にカード6001を盤面に配置しました。");
 
         /* -----------------------------------------------------
            残りのデッキをシャッフル
@@ -4447,7 +4398,9 @@ function summonTokenGroup() {
     const me = currentRole === "user1" ? gameState.player1 : gameState.player2;
     if (!me) return;
 
-    const groups = TOKEN_SUMMON_GROUPS.filter(group => Array.isArray(group.cardIds) && group.cardIds.length);
+    const groups = TOKEN_SUMMON_GROUPS.filter(group =>
+        Array.isArray(group.cardIds) && group.cardIds.length
+    );
     if (!groups.length) {
         alert("トークン召喚対象が設定されていません。");
         return;
@@ -4465,46 +4418,50 @@ function summonTokenGroup() {
     }
 
     const group = groups[groupIndex];
-    const startX = 100;
-    const startY = 100;
-    const gap = 20;
+    const candidates = group.cardIds
+        .map(cardId => createCard(cardId))
+        .filter(Boolean);
 
-    let summoned = 0;
+    if (!candidates.length) {
+        alert("召喚できるカードがありませんでした。カードID設定を確認してください。");
+        return;
+    }
 
-    group.cardIds.forEach((cardId, index) => {
-        const card = createCard(cardId);
-        if (!card) {
-            console.warn(`トークンカードID ${cardId} がカードDBに見つかりません`);
-            return;
-        }
+    /* 指定カード群から1枚だけ選択 */
+    const choice = prompt(
+        "召喚するカードを選択してください。\n" +
+        candidates.map((card, i) => `${i + 1}: ${card.cardId}`).join("\n"),
+        "1"
+    );
+    if (choice === null) return;
 
-        card.faceDown = false;
-        card.rotated = false;
-        card.rotation = false;
-        card.x = startX + index * (90 + gap);
-        card.y = startY;
+    const index = Number(choice) - 1;
+    if (!Number.isInteger(index) || index < 0 || index >= candidates.length) {
+        alert("無効な選択です。");
+        return;
+    }
 
-        me.board.push(card);
-        summoned++;
+    const card = candidates[index];
+    card.faceDown = false;
+    card.rotated = false;
+    card.rotation = false;
+    card.x = 350;
+    card.y = 100;
 
-        sendGameEvent("initial", {
-            cardId: card.instanceId,
-            x: card.x,
-            y: card.y,
-            faceDown: false,
-            card: JSON.parse(JSON.stringify(card))
-        });
+    me.board.push(card);
+    rebuildBoardCardsUnique();
+
+    sendGameEvent("initial", {
+        cardId: card.instanceId,
+        x: card.x,
+        y: card.y,
+        faceDown: false,
+        card: JSON.parse(JSON.stringify(card))
     });
 
-    rebuildBoardCardsUnique();
     sendStateSnapshot();
     renderAll();
-
-    if (summoned > 0) {
-        addLog(`${group.name}を${summoned}枚召喚しました。`);
-    } else {
-        alert("召喚できるカードがありませんでした。カードID設定を確認してください。");
-    }
+    addLog(`${group.name}からカード${card.cardId}を1枚召喚しました。`);
 }
 
 function rollDice() {
