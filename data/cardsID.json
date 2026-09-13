@@ -171,14 +171,11 @@
     "id": "5003",
     "image": "./img/cards/5event/5003.png",
     "type": "event"
-    
-  }, {
+      }, {
     "id": "5004",
     "image": "./img/cards/5event/5004.png",
     "type": "event"
-    
-  },
-
+      }
 
 
   {
