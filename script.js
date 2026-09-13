@@ -3554,6 +3554,21 @@ function setupCardLoupe(
 
 
     /* =========================
+       拡大鏡を安全に消す
+    ========================== */
+
+    function hideLoupe() {
+
+        if (!loupe) {
+            return;
+        }
+
+        loupe.style.display =
+            "none";
+    }
+
+
+    /* =========================
        マウスが出た
     ========================== */
 
@@ -3565,14 +3580,46 @@ function setupCardLoupe(
                 "★ 拡大鏡 mouseleave"
             );
 
+            hideLoupe();
+        }
+    );
 
-            if (!loupe) {
-                return;
+
+    /* =========================
+       ブラウザ画面の外へ
+       マウスが出た場合
+    ========================== */
+
+    document.addEventListener(
+        "mouseout",
+        event => {
+
+            if (!event.relatedTarget) {
+
+                console.log(
+                    "★ 拡大鏡 画面外 強制非表示"
+                );
+
+                hideLoupe();
             }
+        }
+    );
 
 
-            loupe.style.display =
-                "none";
+    /* =========================
+       ブラウザのフォーカスが
+       外れた場合
+    ========================== */
+
+    window.addEventListener(
+        "blur",
+        () => {
+
+            console.log(
+                "★ 拡大鏡 blur 強制非表示"
+            );
+
+            hideLoupe();
         }
     );
 }
