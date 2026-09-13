@@ -118,6 +118,24 @@
     "id": "3006",
     "image": "./img/cards/3magic/3006.png",
     "type": "magic"
+  },    {
+    "id": "3007",
+    "image": "./img/cards/3magic/3007.png",
+    "type": "magic"
+  },
+  {
+    "id": "3008",
+    "image": "./img/cards/3magic/3008.png",
+    "type": "magic"
+  },
+  {
+    "id": "3009",
+    "image": "./img/cards/3magic/3009.png",
+    "type": "magic"
+  },{
+    "id": "3010",
+    "image": "./img/cards/3magic/3010.png",
+    "type": "magic"
   },
   {
     "id": "3501",
