@@ -114,6 +114,10 @@
     "id": "3005",
     "image": "./img/cards/3magic/3005.png",
     "type": "magic"
+  },{
+    "id": "3006",
+    "image": "./img/cards/3magic/3006.png",
+    "type": "magic"
   },
   {
     "id": "3501",
@@ -153,6 +157,14 @@
   {
     "id": "4002",
     "image": "./img/cards/4skill/4002.png",
+    "type": "skill"
+  },  {
+    "id": "4003",
+    "image": "./img/cards/4skill/4003.png",
+    "type": "skill"
+  }, {
+    "id": "4004",
+    "image": "./img/cards/4skill/4004.png",
     "type": "skill"
   },
 
