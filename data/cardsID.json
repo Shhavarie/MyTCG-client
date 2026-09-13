@@ -153,8 +153,7 @@
     "id": "4001",
     "image": "./img/cards/4skill/4001.png",
     "type": "skill"
-  },
-  {
+  },  {
     "id": "4002",
     "image": "./img/cards/4skill/4002.png",
     "type": "skill"
@@ -187,20 +186,17 @@
     "id": "5004",
     "image": "./img/cards/5event/5004.png",
     "type": "event"
-      }
-
+  },
 
   {
     "id": "6001",
     "image": "./img/cards/6item/6001.png",
     "type": "event"
-  },
-  {
+  },  {
     "id": "6002",
     "image": "./img/cards/6item/6002.png",
     "type": "event"
-  },
-  {
+  },  {
     "id": "6003",
     "image": "./img/cards/6item/6003.png",
     "type": "event"
