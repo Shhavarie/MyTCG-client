@@ -116,22 +116,32 @@
     "type": "magic"
   },
   {
-    "id": "3006",
-    "image": "./img/cards/3magic/3006.png",
+    "id": "3501",
+    "image": "./img/cards/3magic/3501.png",
     "type": "magic"
   },{
-    "id": "3007",
-    "image": "./img/cards/3magic/3007.png",
+    "id": "3502",
+    "image": "./img/cards/3magic/3502.png",
     "type": "magic"
   },{
-    "id": "3008",
-    "image": "./img/cards/3magic/3008.png",
+    "id": "3503",
+    "image": "./img/cards/3magic/3503.png",
     "type": "magic"
   },{
-    "id": "3009",
-    "image": "./img/cards/3magic/3009.png",
+    "id": "3504",
+    "image": "./img/cards/3magic/3504.png",
+    "type": "magic"
+  },{
+    "id": "3505",
+    "image": "./img/cards/3magic/3505.png",
+    "type": "magic"
+  },{
+    "id": "3506",
+    "image": "./img/cards/3magic/3506.png",
     "type": "magic"
   },
+
+
 
 
 
@@ -152,13 +162,24 @@
     "image": "./img/cards/5event/5001.png",
     "type": "event"
     
-  },
-  {
+  }, {
     "id": "5002",
     "image": "./img/cards/5event/5002.png",
     "type": "event"
     
+  },  {
+    "id": "5003",
+    "image": "./img/cards/5event/5003.png",
+    "type": "event"
+    
+  }, {
+    "id": "5004",
+    "image": "./img/cards/5event/5004.png",
+    "type": "event"
+    
   },
+
+
 
   {
     "id": "6001",
