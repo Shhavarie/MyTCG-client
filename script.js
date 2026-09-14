@@ -1340,7 +1340,7 @@ async function startGame(role) {
                 initialCard
             );
             initialCard.x = 350;
-            initialCard.y = 550;
+            initialCard.y = 500;
 
             player.board.push(initialCard);
 
@@ -2317,7 +2317,7 @@ function renderBoard() {
                 : sourceX;
 
             const displayY = isOpponent
-                ? boardHeight - sourceY - cardHeight + 50
+                ? boardHeight - sourceY - cardHeight + 35
                 : sourceY;
 
             cardElement.style.left = `${displayX}px`;
