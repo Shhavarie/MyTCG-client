@@ -2307,7 +2307,7 @@ function renderBoard() {
             const boardHeight = boardElement ? boardElement.clientHeight : 800;
             const computedCardStyle = getComputedStyle(cardElement);
             const cardWidth = parseFloat(computedCardStyle.width) || 90;
-            const cardHeight = parseFloat(computedCardStyle.height) || 126;
+            const cardHeight = parseFloat(computedCardStyle.height) || 150;
 
             const sourceX = Number(card.x || 0);
             const sourceY = Number(card.y || 0);
@@ -2317,7 +2317,7 @@ function renderBoard() {
                 : sourceX;
 
             const displayY = isOpponent
-                ? boardHeight - sourceY - cardHeight + 40
+                ? boardHeight - sourceY - cardHeight + 25
                 : sourceY;
 
             cardElement.style.left = `${displayX}px`;
