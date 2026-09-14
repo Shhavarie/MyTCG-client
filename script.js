@@ -2307,7 +2307,7 @@ function renderBoard() {
             const boardHeight = boardElement ? boardElement.clientHeight : 800;
             const computedCardStyle = getComputedStyle(cardElement);
             const cardWidth = parseFloat(computedCardStyle.width) || 90;
-            const cardHeight = parseFloat(computedCardStyle.height) || 155;
+            const cardHeight = parseFloat(computedCardStyle.height) || 166;
 
             const sourceX = Number(card.x || 0);
             const sourceY = Number(card.y || 0);
